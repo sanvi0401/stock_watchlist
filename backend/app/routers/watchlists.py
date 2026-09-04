@@ -8,11 +8,13 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.config import settings
 from app.errors import AppError
+from app.identity import pack_identity
 from app.intelligence.last_seen import compare_and_record
 from app.market.mock import UNIVERSE
 from app.market.service import market_service
 from app.models import User, UserStockState, Watchlist, WatchlistStock
 from app.schemas import AddStockRequest, QuoteOut, WatchlistCreate, WatchlistOut, WatchlistStockOut, WatchlistUpdate
+from app.symbols import resolve_to_symbol
 
 router = APIRouter(prefix="/watchlists", tags=["watchlists"])
 
@@ -34,11 +36,11 @@ def _quote_out(result, quote, company: str) -> QuoteOut:
         week_52_low=quote.week_52_low,
         timestamp=quote.timestamp,
         source=quote.source,
-        data_status=result.data_status,  # type: ignore[arg-type]
+        data_status=result.data_status,
         market_state=quote.market_state,
         first_seen=result.first_seen,
         significance_score=result.significance_score,
-        severity=result.severity,  # type: ignore[arg-type]
+        severity=result.severity,
         explanation=result.explanation,
         change_type=result.change_type,
         evidence=result.evidence,
@@ -86,7 +88,13 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
                 stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=None))
                 continue
             result = compare_and_record(
-                db, user.id, quote, snap.id if snap else None, commit_last_seen=False
+                db,
+                user.id,
+                quote,
+                snap.id if snap else None,
+                commit_last_seen=False,
+                sensitivity=user.sensitivity,
+                lookback_mode=user.lookback_mode,
             )
             qout = _quote_out(result, quote, quote.company_name)
             stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=qout))
@@ -106,6 +114,7 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
         attention_count=attention,
         meaningful_count=meaningful,
         stable_count=stable,
+        identity_token=pack_identity(db, user),
     )
 
 
@@ -126,7 +135,7 @@ def create_watchlist(
     db.flush()
     seen: set[str] = set()
     for raw in body.symbols:
-        symbol = raw.upper().strip()
+        symbol = resolve_to_symbol(db, raw)
         if not symbol or symbol in seen:
             continue
         seen.add(symbol)
@@ -203,7 +212,9 @@ def add_stock(
     )
     if not wl:
         raise AppError(404, "not_found", "Watchlist not found.")
-    symbol = body.symbol.upper().strip()
+    symbol = resolve_to_symbol(db, body.symbol)
+    if not symbol:
+        raise AppError(404, "invalid_stock", "We couldn't find that company or ticker. Try a name like Google or a symbol like GOOGL.")
     quote, _snap = market_service.get_quote(db, symbol)
     if not quote:
         raise AppError(404, "invalid_stock", "We couldn't find that symbol.")
