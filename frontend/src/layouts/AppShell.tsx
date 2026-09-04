@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { api, clearToken } from '../services/api'
 import type { Health, User } from '../types'
 import { cn } from '../utils/cn'
-import { MARKET_LABEL } from '../utils/format'
+import { marketLine } from '../utils/format'
 
 const links = [
   { to: '/app/overview', label: 'Overview' },
@@ -27,7 +27,7 @@ export default function AppShell() {
     return () => clearInterval(t)
   }, [])
 
-  const marketOpen = health?.market_state === 'OPEN'
+  const anyOpen = health?.markets?.some((m) => m.state === 'OPEN') ?? false
 
   return (
     <div className="min-h-screen bg-surface text-on-surface">
@@ -57,12 +57,12 @@ export default function AppShell() {
         </div>
         <div className="p-4">
           <div className="rounded-lg border border-[#232F46] bg-surface-container p-3">
-            <p className={cn('text-xs', marketOpen ? 'text-gain' : 'text-on-surface-variant')}>
-              {health ? MARKET_LABEL[health.market_state] ?? health.market_state : 'Checking market…'}
+            <p className={cn('text-xs', anyOpen ? 'text-gain' : 'text-on-surface-variant')}>
+              {health ? marketLine(health.markets) : 'Checking markets…'}
             </p>
             {health ? (
               <p className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                {health.provider} · cache {health.cache}
+                {health.provider} · cache {health.cache}{health.provider_cooldown_seconds > 0 ? ` · provider cooling ${health.provider_cooldown_seconds}s` : ''}
               </p>
             ) : null}
             <p className="mt-2 truncate text-sm font-medium">{me?.name ?? '…'}</p>
@@ -88,7 +88,7 @@ export default function AppShell() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search a company or ticker (Google, NVDA…)"
+              placeholder="Search any listed company (Reliance, TCS.NS, NVDA…)"
               className="h-9 w-full rounded border border-[#232F46] bg-[#0B0F17] px-3 text-sm"
               aria-label="Search stocks"
             />

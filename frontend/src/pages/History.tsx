@@ -66,7 +66,7 @@ export default function HistoryPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Link to={`/app/stocks/${it.symbol}`} className="font-mono text-lg">{it.symbol}</Link>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-[#94A3B8]">{fmtPrice(it.baseline_price)} → {fmtPrice(it.current_price)}</span>
+                <span className="font-mono text-xs text-[#94A3B8]">{fmtPrice(it.baseline_price, it.currency)} → {fmtPrice(it.current_price, it.currency)}</span>
                 <Delta value={it.since_last_check_percent} />
                 <SeverityPill severity={it.severity} />
               </div>

@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from './legal'
-import { fmtCap, fmtPrice, fmtRelative, fmtVolume } from './utils/format'
+import { fmtCap, fmtPrice, fmtRelative, fmtVolume, marketLine } from './utils/format'
 
 describe('formatters', () => {
-  it('formats price', () => {
-    expect(fmtPrice(172.38)).toContain('172.38')
+  it('formats price in the instrument currency', () => {
+    expect(fmtPrice(172.38)).toBe('$172.38')
+    expect(fmtPrice(1322, 'INR')).toBe('₹1,322.00')
+    expect(fmtPrice(1.256, 'GBP')).toBe('£1.26')
+    expect(fmtPrice(3081, 'JPY')).toBe('￥3,081')
+    expect(fmtPrice(5, 'XXX')).toMatch(/5/)
+  })
+  it('summarises markets', () => {
+    expect(marketLine([{ exchange_name: 'NSE', state: 'OPEN' }, { exchange_name: 'NYSE', state: 'CLOSED' }])).toBe('NSE open · NYSE closed')
+    expect(marketLine([])).toBe('')
   })
   it('formats market cap and volume', () => {
     expect(fmtCap(4.23e12)).toBe('$4.23T')
+    expect(fmtCap(1.79e13, 'INR')).toBe('₹17.90 L Cr')
     expect(fmtCap(0)).toBe('—')
     expect(fmtVolume(89_400_000)).toBe('89.4M')
     expect(fmtVolume(1_800)).toBe('2K')

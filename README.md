@@ -9,6 +9,11 @@ volatility and volume, and explains in plain English why it matters. Quotes are
 always labelled LIVE / DELAYED / STALE / UNAVAILABLE, and a provider outage never
 overwrites good data.
 
+Works across exchanges: NSE and BSE (₹), NYSE and Nasdaq ($), LSE (£), Tokyo,
+Hong Kong, XETRA and anything else Yahoo Finance covers. Each quote carries its
+own currency, exchange and session hours, so "market open" and "stale" mean
+the right thing for RELIANCE.NS at 10:00 IST and for AAPL at the same moment.
+
 Built for **Code, by Groww 2026** (Smart Market Watchlist). The 100-word pitch is
 in [PITCH.md](PITCH.md).
 
@@ -40,7 +45,7 @@ seeds a 14-hour-old baseline so the first Overview already shows changes.
 Tests:
 
 ```bash
-cd backend && PYTHONPATH=. pytest          # 55 tests
+cd backend && PYTHONPATH=. pytest          # 71 tests
 cd frontend && npm test && npm run lint && npm run build
 ```
 
@@ -70,11 +75,17 @@ decisions follow from that:
    price on heavy volume is not "something changed since you looked".
 
 3. **Say what you don't know.**
-   Every quote carries a freshness label derived from market hours and print
-   age, not from what the provider claims. When the provider fails, the last
-   good snapshot is served and labelled STALE. When there is nothing valid,
+   Every quote carries a freshness label derived from *its exchange's* hours and
+   print age, not from what the provider claims. When the provider fails, the
+   last good snapshot is served and labelled STALE. When there is nothing valid,
    the symbol is listed as UNAVAILABLE with the last price you saw, and your
    baseline is left untouched.
+
+4. **No home-market assumptions in the data path.**
+   A quote is (price, currency, exchange, timezone, session window). Prices are
+   formatted in their own currency, market state is computed per exchange, and
+   search ranks the NSE listing of an Indian company above its Frankfurt
+   depositary receipt. Pence-quoted LSE prices are normalised to pounds.
 
 ### What the Overview shows
 
@@ -105,9 +116,11 @@ backend/app
     explanation.py      plain-English "why" + evidence
   market/
     service.py          cache → provider → validate → resolve conflicts → snapshot
-    freshness.py        market hours, LIVE/DELAYED/STALE rules, daily-bar timestamps
+    freshness.py        per-exchange hours, LIVE/DELAYED/STALE rules, daily-bar timestamps
+    yahoo_meta.py       currency / exchange / session window / print time from Yahoo metadata
     yfinance_provider   delayed Yahoo quotes (local), yahoo_http (Vercel, no pandas),
-    mock.py             deterministic offline universe, alpha_vantage optional
+    mock.py             deterministic offline universe (NSE + US), alpha_vantage optional
+  rate_limit.py         per-IP limit on credential endpoints
   worker.py             background refresh of every watched symbol + snapshot pruning
   cache.py              Redis if reachable, else in-process TTL cache
 ```
@@ -115,9 +128,10 @@ backend/app
 ### Data model
 
 - `users`, `watchlists`, `watchlist_stocks` (unique per list + symbol)
-- `market_snapshots` — **shared across users**. One row per distinct print;
-  unchanged prints refresh the row in place. Newest row per symbol is the
-  outage fallback. Pruned after 7 days.
+- `market_snapshots` — **shared across users**. One row per distinct print,
+  with currency, exchange, timezone and the regular-session window; unchanged
+  prints refresh the row in place. Newest row per symbol is the outage
+  fallback. Pruned after 7 days.
 - `user_stock_state` — per (user, symbol): `baseline_price/at` (what we compare
   against) and `last_seen_price/at` (most recent viewing). Unique constraint;
   concurrent first views are resolved by the constraint, not by hoping.
@@ -149,18 +163,29 @@ Balanced bands: STABLE < 30 ≤ NOTABLE < 60 ≤ MEANINGFUL < 80 ≤ HIGH.
 Conservative and Sensitive scale the score and shift the bands. A 1-sigma move
 is NOTABLE, 2-sigma is MEANINGFUL, 2.5-sigma (or 2-sigma on heavy volume) is HIGH.
 
-### Freshness
+### Market state and freshness
+
+Market state is per instrument, decided in this order:
+
+1. The regular-session window Yahoo reports for that instrument
+   (`currentTradingPeriod`). If that window is not today's date in the
+   exchange's timezone, the market is closed today: a weekend **or a holiday**,
+   with no holiday calendar to maintain.
+2. A fallback table of regular hours by Yahoo exchange code (NSE 09:15–15:30
+   IST, NYSE 09:30–16:00 ET, LSE 08:00–16:30, Tokyo, HKEX, XETRA, ASX, …).
+3. The US session.
 
 | Label | When |
 |---|---|
 | LIVE | provider is real-time and the print is under 5 minutes old |
-| DELAYED | delayed feed (Yahoo ≈ 15 min) but current for the session; any print while the market is closed |
-| STALE | market open and the newest print is older than `STALE_AFTER_MINUTES`; or a fallback snapshot is being served |
+| DELAYED | delayed feed (Yahoo ≈ 15 min) but current for the session; any print while that market is closed |
+| STALE | that market is open and the newest print is older than `STALE_AFTER_MINUTES`; or a fallback snapshot is being served |
 | UNAVAILABLE | nothing valid |
 
-Daily-bar providers stamp today's bar with the fetch time (it is still being
-updated) and a finished bar with that session's 16:00 ET close, so weekend
-data is DELAYED, not STALE.
+The print time is Yahoo's `regularMarketTime` when present. Otherwise a
+daily bar for today is stamped with the fetch time (it is still being updated)
+and a finished bar with that exchange's close, so weekend data is DELAYED, not
+STALE.
 
 ### Conflicting and bad data
 
@@ -172,6 +197,10 @@ data is DELAYED, not STALE.
   one wins and is served.
 - Labels are recomputed at read time. A cached "LIVE" quote is re-classified
   against the clock, so a cache never lies about freshness.
+- **Provider cooldown.** A provider exception or HTTP 429 puts the provider on
+  a `PROVIDER_COOLDOWN_SECONDS` cooldown. During it, stored snapshots are served
+  as STALE and `/health` reports the remaining time. A throttling upstream
+  degrades labels, not the product.
 
 ---
 
@@ -211,6 +240,10 @@ cache by provider *and* freshness window, and add a per-user rate limit on
   4xx and a message the UI can show.
 - Password reset tokens are hashed at rest, single-use, and expire in 2 hours.
   Forgot-password returns the same shape whether or not the address exists.
+  Credential endpoints are rate-limited per IP.
+- LSE quotes arrive in pence (`GBp`); they are converted to pounds before
+  scoring or display. A BSE listing is hidden from search when the same
+  company's NSE listing is present.
 
 ---
 
@@ -223,10 +256,13 @@ cache by provider *and* freshness window, and add a per-user rate limit on
   the response so the flow can be exercised.
 - **Stateless JWT logout.** The client discards the token; there is no
   server-side denylist.
-- **US market hours only, no holiday calendar.** A US holiday shows as OPEN
-  and quotes will read STALE for the day. Quotes are USD.
-- **Yahoo's unofficial endpoints** can throttle. Every provider falls back to the
-  last snapshot, then to the deterministic mock universe for well-known names.
+- **Market hours.** Holidays are detected from the provider's session window,
+  not from a calendar; with a provider that reports none, the fallback table
+  ignores holidays and lunch breaks. Currencies are not converted; each price
+  is shown in its own currency and nothing is summed across currencies.
+- **Yahoo's unofficial endpoints** can throttle. The provider cools down, every
+  read falls back to the last snapshot (STALE), and the deterministic mock
+  universe covers a handful of well-known NSE and US names for offline demos.
 - **Vercel.** The API deploys as a serverless function (`api/index.py`). Without
   `DATABASE_URL` it uses SQLite in `/tmp`, which is wiped when the instance
   recycles; the UI shows a banner and `/health` reports `persistence:
@@ -245,11 +281,11 @@ cache by provider *and* freshness window, and add a per-user rate limit on
 | POST/DELETE | `/watchlists/{id}/stocks[/{symbol}]` | add by name or ticker / remove |
 | GET | `/dashboard` | the Overview; counts as a visit |
 | POST | `/dashboard/checkpoint` | "I'm caught up": reset all baselines |
-| GET | `/stocks/search?q=` | company name or ticker |
+| GET | `/stocks/search?q=` | company name or ticker, any exchange; ranked NSE → US → others |
 | GET | `/stocks/{symbol}` | briefing; read-only, does not move the baseline |
 | GET | `/changes/history?severity=&symbol=&cursor=` | ledger, keyset paginated |
 | GET/PATCH | `/settings` | name, timezone, sensitivity, baseline mode, overview filter |
 | GET/POST | `/notifications`, `/notifications/read` | in-app alerts |
-| GET | `/health` | provider, cache tier, persistence mode, market state |
+| GET | `/health` | provider, cache tier, persistence mode, NSE and US market state, provider cooldown |
 
 Errors are `{code, message}` with a stable `code` the frontend switches on.

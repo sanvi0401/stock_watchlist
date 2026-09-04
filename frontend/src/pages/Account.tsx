@@ -97,7 +97,7 @@ export function SettingsPage() {
               <Select label="Timezone" value={form.timezone} onChange={(timezone) => setForm({ ...form, timezone })}>
                 {TIMEZONES.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}
               </Select>
-              <p className="mt-1 text-xs text-[#94A3B8]">Used for greetings and timestamps. Market hours are always US Eastern.</p>
+              <p className="mt-1 text-xs text-[#94A3B8]">Used for greetings and timestamps. Market hours follow each stock’s own exchange.</p>
             </div>
             <div><Label>Member since</Label><p className="text-sm text-[#CBD5E1]">{fmtDateTime(form.created_at)}</p></div>
           </div>

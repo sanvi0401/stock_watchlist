@@ -41,6 +41,7 @@ def history(
                 severity=r.severity,  # type: ignore[arg-type]
                 baseline_price=r.baseline_price,
                 current_price=r.current_price,
+                currency=r.currency or "USD",
                 since_last_check_percent=r.since_last_check_percent,
                 explanation=r.explanation,
                 evidence=[e for e in (r.evidence or "").split(" | ") if e],

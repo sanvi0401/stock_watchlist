@@ -13,6 +13,7 @@ from app.deps import get_current_user
 from app.errors import AppError
 from app.market.freshness import as_utc
 from app.models import PasswordResetToken, User
+from app.rate_limit import auth_rate_limit
 from app.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -24,13 +25,14 @@ from app.schemas import (
 from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+limited = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(auth_rate_limit)])
 
 _DUPLICATE = AppError(409, "duplicate_email", "An account with this email already exists.")
 _BAD_LOGIN = AppError(401, "invalid_credentials", "Email or password is incorrect.")
 _BAD_RESET = AppError(400, "invalid_reset_token", "This reset link is invalid or expired.")
 
 
-@router.post("/register", response_model=TokenResponse)
+@limited.post("/register", response_model=TokenResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     email = body.email.lower()
     if db.scalar(select(User).where(User.email == email)):
@@ -47,7 +49,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenRespo
     return TokenResponse(access_token=create_access_token(str(user.id)), onboarding_complete=False)
 
 
-@router.post("/login", response_model=TokenResponse)
+@limited.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not verify_password(body.password, user.password_hash):
@@ -65,7 +67,7 @@ def logout(_user: User = Depends(get_current_user)) -> dict:
     return {"ok": True}
 
 
-@router.post("/forgot-password")
+@limited.post("/forgot-password")
 def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     # Same response shape whether or not the address exists (no account enumeration).
@@ -87,7 +89,7 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) 
     return response
 
 
-@router.post("/reset-password")
+@limited.post("/reset-password")
 def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) -> dict:
     token_hash = hashlib.sha256(body.token.encode()).hexdigest()
     row = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash))

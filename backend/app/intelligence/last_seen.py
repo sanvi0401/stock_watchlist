@@ -233,6 +233,7 @@ def compare_and_record(
             severity=scored["severity"],
             baseline_price=baseline_price,
             current_price=quote.price,
+            currency=quote.currency,
             since_last_check_percent=round(since_pct, 2),
             explanation=explanation,
             evidence=" | ".join(evidence),

@@ -79,6 +79,9 @@ class QuoteOut(BaseModel):
     week_52_high: float
     week_52_low: float
     sparkline: list[float] = []
+    currency: str = "USD"
+    exchange: str = ""
+    exchange_name: str = ""
     timestamp: datetime
     source: str
     data_status: DataStatus
@@ -110,6 +113,12 @@ class WatchlistOut(BaseModel):
     unavailable_count: int = 0
 
 
+class MarketOut(BaseModel):
+    exchange: str
+    exchange_name: str
+    state: str
+
+
 class DashboardOut(BaseModel):
     greeting: str
     baseline_at: datetime | None
@@ -120,6 +129,7 @@ class DashboardOut(BaseModel):
     needs_attention: int
     stable_count: int
     market_state: str
+    markets: list[MarketOut] = []
     data_status: DataStatus
     needs_attention_items: list[QuoteOut]
     meaningful_items: list[QuoteOut]
@@ -144,6 +154,7 @@ class HistoryItem(BaseModel):
     severity: Severity
     baseline_price: float
     current_price: float
+    currency: str = "USD"
     since_last_check_percent: float
     explanation: str
     evidence: list[str] = []
@@ -191,6 +202,9 @@ class SearchResult(BaseModel):
     company_name: str
     current_price: float | None
     price_change_percent: float | None
+    currency: str = "USD"
+    exchange: str = ""
+    exchange_name: str = ""
     data_status: DataStatus
     market_state: str
 
@@ -202,4 +216,6 @@ class HealthOut(BaseModel):
     cache: str
     persistence: str
     market_state: str
+    markets: list[MarketOut] = []
+    provider_cooldown_seconds: int = 0
     server_time: datetime

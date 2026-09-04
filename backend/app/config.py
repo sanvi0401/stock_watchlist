@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # While the market is open, a quote older than this is STALE.
     stale_after_minutes: int = 20
     max_symbols_per_watchlist: int = 100
+    # After a provider failure, skip the provider for this long and serve snapshots as STALE.
+    provider_cooldown_seconds: int = 60
+    # Per-IP limit on sign-in / sign-up / reset endpoints.
+    auth_rate_limit_per_minute: int = 20
     public_app_url: str = "http://127.0.0.1:43123"
 
     @property

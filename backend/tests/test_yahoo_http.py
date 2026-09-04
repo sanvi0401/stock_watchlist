@@ -16,7 +16,7 @@ def _chart_payload():
                         "fiftyTwoWeekLow": 80.0,
                         "shortName": "NVIDIA Corporation",
                     },
-                    "timestamp": [1, 2, 3, 4, 5, 6, 7, 8],
+                    "timestamp": [1_700_000_000 + 86_400 * i for i in range(8)],
                     "indicators": {
                         "quote": [
                             {
@@ -36,13 +36,14 @@ def _chart_payload():
 def test_yahoo_http_quote_from_chart():
     provider = YahooHttpProvider()
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status = MagicMock()
     response.json.return_value = _chart_payload()
     with patch.object(provider, "_client") as client:
         client.get.return_value = response
         quote = provider.get_quote("NVDA")
     assert quote is not None
-    assert quote.source == "yfinance"
+    assert quote.source == "yahoo"
     assert quote.data_status == "DELAYED"
     assert quote.price == 110.0
     assert quote.previous_close == 106.0

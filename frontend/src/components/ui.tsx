@@ -81,6 +81,17 @@ export function DataBadge({ status }: { status: DataStatus | string }) {
   return <span className={cn('font-mono text-[11px] uppercase tracking-wider', map[status] || 'text-outline')}>{status}</span>
 }
 
+export function ExchangeTag({ name, state }: { name: string; state?: string }) {
+  if (!name) return null
+  const dot = state === 'OPEN' ? 'bg-gain' : state === 'PRE_MARKET' ? 'bg-warn' : 'bg-[#64748B]'
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-[#232F46] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[#94A3B8]" title={state ? `${name} ${state.toLowerCase().replace('_', ' ')}` : name}>
+      {state ? <span className={cn('h-1.5 w-1.5 rounded-full', dot)} /> : null}
+      {name}
+    </span>
+  )
+}
+
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded bg-surface-container-high', className)} />
 }

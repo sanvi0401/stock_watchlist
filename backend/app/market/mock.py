@@ -1,8 +1,69 @@
 from datetime import UTC, datetime, timedelta
 
+from app.market.freshness import exchange_for
 from app.market.types import NormalizedQuote
 
 UNIVERSE: dict[str, dict] = {
+    "RELIANCE.NS": {
+        "name": "Reliance Industries Limited",
+        "price": 1322.00,
+        "previous_close": 1301.50,
+        "volume": 14_200_000,
+        "average_volume": 9_800_000,
+        "volatility": 0.014,
+        "market_cap": 1.79e13,
+        "week_52_high": 1551.00,
+        "week_52_low": 1115.55,
+        "last_seen_demo": 1290.00,
+        "spark": [1280, 1284, 1290, 1296, 1301, 1305, 1315, 1322.00],
+        "currency": "INR",
+        "exchange": "NSI",
+    },
+    "TCS.NS": {
+        "name": "Tata Consultancy Services Limited",
+        "price": 3092.40,
+        "previous_close": 3110.10,
+        "volume": 2_100_000,
+        "average_volume": 2_400_000,
+        "volatility": 0.012,
+        "market_cap": 1.12e13,
+        "week_52_high": 4592.25,
+        "week_52_low": 2866.60,
+        "last_seen_demo": 3115.00,
+        "spark": [3130, 3125, 3118, 3112, 3110, 3105, 3098, 3092.40],
+        "currency": "INR",
+        "exchange": "NSI",
+    },
+    "INFY.NS": {
+        "name": "Infosys Limited",
+        "price": 1488.20,
+        "previous_close": 1436.90,
+        "volume": 18_900_000,
+        "average_volume": 7_600_000,
+        "volatility": 0.015,
+        "market_cap": 6.2e12,
+        "week_52_high": 2006.45,
+        "week_52_low": 1307.00,
+        "last_seen_demo": 1430.00,
+        "spark": [1420, 1424, 1428, 1432, 1436, 1440, 1470, 1488.20],
+        "currency": "INR",
+        "exchange": "NSI",
+    },
+    "HDFCBANK.NS": {
+        "name": "HDFC Bank Limited",
+        "price": 968.35,
+        "previous_close": 966.10,
+        "volume": 11_300_000,
+        "average_volume": 12_100_000,
+        "volatility": 0.011,
+        "market_cap": 1.49e13,
+        "week_52_high": 1018.85,
+        "week_52_low": 806.50,
+        "last_seen_demo": 966.00,
+        "spark": [960, 962, 963, 965, 966, 967, 968, 968.35],
+        "currency": "INR",
+        "exchange": "NSI",
+    },
     "NVDA": {
         "name": "NVIDIA Corporation",
         "price": 172.38,
@@ -175,6 +236,7 @@ class MockMarketDataProvider:
             now = now - timedelta(hours=6)
         if status == "DELAYED":
             now = now - timedelta(minutes=15)
+        info = exchange_for(row.get("exchange"), symbol)
         return NormalizedQuote(
             symbol=symbol,
             company_name=row["name"],
@@ -191,6 +253,10 @@ class MockMarketDataProvider:
             data_status=status,
             market_state="UNKNOWN",
             sparkline=list(row.get("spark") or []),
+            currency=str(row.get("currency") or info.currency),
+            exchange=info.code,
+            exchange_name=info.name,
+            timezone=info.timezone,
         )
 
     def get_quote(self, symbol: str) -> NormalizedQuote | None:

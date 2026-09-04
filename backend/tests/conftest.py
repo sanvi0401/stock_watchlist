@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("MARKET_DATA_PROVIDER", "mock")
 os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:1/15")  # unreachable on purpose: exercise the memory cache
 
@@ -60,3 +61,13 @@ def auth_headers(email: str | None = None) -> dict[str, str]:
     if r.status_code == 409:
         r = client.post("/auth/login", json={"email": email, "password": "password12"})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+@pytest.fixture(autouse=True)
+def _reset_provider_cooldown():
+    """Cooldown and rate-limit state live in the process cache; never leak them between tests."""
+    from app import cache
+
+    cache.cache_delete("provider:cooldown_until")
+    yield
+    cache.cache_delete("provider:cooldown_until")

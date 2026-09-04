@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../services/api'
 import type { SearchHit, Watchlist } from '../types'
-import { Button, Card, DataBadge, Delta, ErrorState, Input } from '../components/ui'
+import { Button, Card, DataBadge, Delta, ErrorState, ExchangeTag, Input } from '../components/ui'
 import { fmtPrice } from '../utils/format'
 
-const QUICK_ADD = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD']
+const QUICK_ADD = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'NVDA', 'AAPL', 'MSFT', 'TSLA']
 
 type Searched = { term: string; hits: SearchHit[] }
 
@@ -71,10 +71,10 @@ export default function DiscoverPage({ initialQuery = '' }: { initialQuery?: str
     <div>
       <h1 className="text-[30px] font-semibold">Discover</h1>
       <p className="mt-1 text-sm text-[#94A3B8]">
-        Search by company name (“Google”) or ticker (GOOGL). Adding a name records the price you saw as its baseline.
+        Any exchange Yahoo covers: search by company name (“Reliance”, “Google”) or ticker (RELIANCE.NS, TCS.BO, GOOGL, VOD.L). Adding a name records the price you saw as its baseline.
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex-1"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search Google, NVIDIA, Apple…" aria-label="Search" /></div>
+        <div className="flex-1"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search Reliance, Infosys, NVIDIA, Apple…" aria-label="Search" /></div>
         {lists.length > 0 ? (
           <label className="text-sm text-[#94A3B8]">
             Add to
@@ -98,11 +98,11 @@ export default function DiscoverPage({ initialQuery = '' }: { initialQuery?: str
         {hits.map((h) => (
           <Card key={h.symbol} className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <Link to={`/app/stocks/${h.symbol}`} className="font-mono text-lg">{h.symbol}</Link>
+              <Link to={`/app/stocks/${h.symbol}`} className="font-mono text-lg">{h.symbol}</Link> <ExchangeTag name={h.exchange_name} state={h.market_state} />
               <p className="text-sm text-[#94A3B8]">{h.company_name}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-mono">{h.current_price != null ? fmtPrice(h.current_price) : '—'}</span>
+              <span className="font-mono">{h.current_price != null ? fmtPrice(h.current_price, h.currency) : '—'}</span>
               <Delta value={h.price_change_percent} />
               <DataBadge status={h.data_status} />
               <Button className="shrink-0" variant="outline" disabled={adding === h.symbol || onList(h.symbol)} onClick={() => addSymbol(h.symbol)}>
@@ -113,7 +113,7 @@ export default function DiscoverPage({ initialQuery = '' }: { initialQuery?: str
         ))}
       </div>
       <h2 className="mt-10 text-lg font-semibold">Quick add</h2>
-      <p className="mt-1 text-sm text-[#94A3B8]">Widely followed large caps, useful for trying the product quickly. Not a recommendation.</p>
+      <p className="mt-1 text-sm text-[#94A3B8]">Widely followed NSE and US large caps, useful for trying the product quickly. Not a recommendation.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {QUICK_ADD.map((t) => (
           <Button key={t} variant="outline" disabled={adding === t || onList(t)} onClick={() => addSymbol(t)}>

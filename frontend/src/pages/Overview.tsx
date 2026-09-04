@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../services/api'
 import type { Dashboard, Quote } from '../types'
-import { Button, Card, DataBadge, Delta, EmptyState, ErrorState, SeverityPill, Skeleton } from '../components/ui'
-import { MARKET_LABEL, fmtPrice, fmtRelative } from '../utils/format'
+import { Button, Card, DataBadge, Delta, EmptyState, ErrorState, ExchangeTag, SeverityPill, Skeleton } from '../components/ui'
+import { fmtPrice, fmtRelative, marketLine } from '../utils/format'
 
 const ACCENT: Record<string, string> = { HIGH: '#F43F5E', MEANINGFUL: '#F59E0B', NOTABLE: '#6366F1', STABLE: '#10B981' }
 
@@ -13,10 +13,11 @@ function QuoteCard({ q }: { q: Quote }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Link to={`/app/stocks/${q.symbol}`} className="font-mono text-lg font-medium">{q.symbol}</Link>
+          <ExchangeTag name={q.exchange_name} state={q.market_state} />
           <p className="text-sm text-[#94A3B8]">{q.company_name}</p>
         </div>
         <div className="text-right">
-          <p className="font-mono text-xl">{fmtPrice(q.current_price)}</p>
+          <p className="font-mono text-xl">{fmtPrice(q.current_price, q.currency)}</p>
           <Delta value={q.since_last_check_percent} />
           <p className="mt-1 text-[11px] text-[#94A3B8]">since {fmtRelative(q.baseline_at)}</p>
         </div>
@@ -85,8 +86,7 @@ export default function OverviewPage() {
           <h1 className="text-[30px] font-semibold leading-[38px]">{data.greeting}</h1>
           <p className="mt-1 text-sm text-[#94A3B8]">
             {subtitle}
-            {' · '}
-            {MARKET_LABEL[data.market_state] ?? data.market_state}
+            {data.markets.length ? ` · ${marketLine(data.markets)}` : ''}
             {' · '}
             <DataBadge status={data.data_status} />
           </p>
@@ -136,8 +136,8 @@ export default function OverviewPage() {
               <tbody>
                 {data.stable_items.map((q) => (
                   <tr key={q.symbol} className="border-t border-[#232F46] hover:bg-[#1A2234]">
-                    <td className="px-3 py-3"><Link to={`/app/stocks/${q.symbol}`} className="font-mono">{q.symbol}</Link> <span className="text-[#94A3B8]">{q.company_name}</span></td>
-                    <td className="px-3 py-3 font-mono">{fmtPrice(q.current_price)}</td>
+                    <td className="px-3 py-3"><Link to={`/app/stocks/${q.symbol}`} className="font-mono">{q.symbol}</Link> <ExchangeTag name={q.exchange_name} state={q.market_state} /> <span className="text-[#94A3B8]">{q.company_name}</span></td>
+                    <td className="px-3 py-3 font-mono">{fmtPrice(q.current_price, q.currency)}</td>
                     <td className="px-3 py-3">{q.first_seen ? <span className="text-xs text-[#94A3B8]">baseline set</span> : <Delta value={q.since_last_check_percent} />}</td>
                     <td className="px-3 py-3"><Delta value={q.price_change_percent} /></td>
                     <td className="px-3 py-3"><DataBadge status={q.data_status} /></td>
@@ -156,7 +156,7 @@ export default function OverviewPage() {
             <Card key={q.symbol} accent="#F43F5E" className="mb-2">
               <p className="font-mono">{q.symbol}</p>
               <p className="text-sm text-[#CBD5E1]">{q.explanation}</p>
-              {q.current_price > 0 ? <p className="mt-1 text-xs text-[#94A3B8]">Last valid price you saw: {fmtPrice(q.current_price)}</p> : null}
+              {q.current_price > 0 ? <p className="mt-1 text-xs text-[#94A3B8]">Last valid price you saw: {fmtPrice(q.current_price, q.currency)}</p> : null}
             </Card>
           ))}
         </section>

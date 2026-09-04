@@ -10,7 +10,7 @@ export default function Onboarding() {
   const nav = useNavigate()
   const [step, setStep] = useState(0)
   const [name, setName] = useState('My Watchlist')
-  const [symbols, setSymbols] = useState('NVDA, AAPL, MSFT, TSLA')
+  const [symbols, setSymbols] = useState('RELIANCE.NS, TCS.NS, INFY.NS, NVDA, AAPL')
   const [timezone, setTimezone] = useState('Asia/Kolkata')
   const [sensitivity, setSensitivity] = useState('balanced')
   const [err, setErr] = useState('')
@@ -61,8 +61,8 @@ export default function Onboarding() {
         <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} required /></div>
         <div>
           <Label>Companies or tickers, comma separated</Label>
-          <Input value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder="NVDA, Apple, Google" />
-          <p className="mt-1 text-xs text-[#94A3B8]">Today’s price becomes each name’s baseline. Come back later to see what changed.</p>
+          <Input value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder="Reliance, TCS.NS, Apple, GOOGL" />
+          <p className="mt-1 text-xs text-[#94A3B8]">NSE, BSE, US, LSE and other Yahoo-covered exchanges. Today’s price becomes each name’s baseline; come back later to see what changed.</p>
         </div>
         {err ? <p className="text-sm text-loss">{err}</p> : null}
         <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Open Overview'}</Button>

@@ -1,13 +1,34 @@
-export function fmtPrice(n: number) {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+const LOCALE: Record<string, string> = { INR: 'en-IN', GBP: 'en-GB', EUR: 'de-DE', JPY: 'ja-JP', HKD: 'en-HK', CAD: 'en-CA', AUD: 'en-AU' }
+
+/** Price in the instrument's own currency: ₹1,322.00 for NSE, $172.38 for Nasdaq, £1.26 for LSE. */
+export function fmtPrice(n: number, currency = 'USD') {
+  const code = currency || 'USD'
+  try {
+    return n.toLocaleString(LOCALE[code] ?? 'en-US', { style: 'currency', currency: code, maximumFractionDigits: code === 'JPY' ? 0 : 2 })
+  } catch {
+    return `${n.toFixed(2)} ${code}`
+  }
 }
 
-export function fmtCap(n: number) {
+export function fmtCap(n: number, currency = 'USD') {
   if (!n) return '—'
-  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  return fmtPrice(n)
+  const sym = symbolFor(currency)
+  if (currency === 'INR') {
+    if (n >= 1e12) return `${sym}${(n / 1e12).toFixed(2)} L Cr`
+    if (n >= 1e7) return `${sym}${(n / 1e7).toFixed(0)} Cr`
+  }
+  if (n >= 1e12) return `${sym}${(n / 1e12).toFixed(2)}T`
+  if (n >= 1e9) return `${sym}${(n / 1e9).toFixed(1)}B`
+  if (n >= 1e6) return `${sym}${(n / 1e6).toFixed(1)}M`
+  return fmtPrice(n, currency)
+}
+
+function symbolFor(currency: string) {
+  try {
+    return (0).toLocaleString(LOCALE[currency] ?? 'en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).replace(/[\d.,\s]/g, '')
+  } catch {
+    return `${currency} `
+  }
 }
 
 export function fmtVolume(n: number) {
@@ -42,7 +63,12 @@ export function fmtDateTime(iso: string | null | undefined) {
 }
 
 export const MARKET_LABEL: Record<string, string> = {
-  OPEN: 'US market open',
-  CLOSED: 'US market closed',
-  PRE_MARKET: 'Pre-market',
+  OPEN: 'open',
+  CLOSED: 'closed',
+  PRE_MARKET: 'pre-market',
+}
+
+export function marketLine(markets: { exchange_name: string; state: string }[]) {
+  if (!markets.length) return ''
+  return markets.map((m) => `${m.exchange_name} ${MARKET_LABEL[m.state] ?? m.state.toLowerCase()}`).join(' · ')
 }

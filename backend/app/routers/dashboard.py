@@ -19,7 +19,7 @@ from app.intelligence.last_seen import checkpoint, compare_and_record, load_stat
 from app.market.freshness import as_utc, market_state
 from app.market.service import market_service
 from app.models import Notification, User, Watchlist
-from app.schemas import CheckpointOut, DashboardOut, QuoteOut
+from app.schemas import CheckpointOut, DashboardOut, MarketOut, QuoteOut
 from app.serializers import quote_out, unavailable_out
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,17 @@ def _watched_symbols(db: Session, user: User) -> tuple[list[Watchlist], list[str
             if s.symbol not in symbols:
                 symbols.append(s.symbol)
     return list(lists), symbols
+
+
+def _markets(items: list[QuoteOut]) -> list[MarketOut]:
+    """One row per exchange present on the dashboard, home market first."""
+    seen: dict[str, MarketOut] = {}
+    for i in items:
+        key = i.exchange or "NMS"
+        if key not in seen:
+            seen[key] = MarketOut(exchange=key, exchange_name=i.exchange_name or key, state=i.market_state)
+    order = {"NSI": 0, "BSE": 1}
+    return sorted(seen.values(), key=lambda m: (order.get(m.exchange, 2), m.exchange_name))
 
 
 def _overall_status(items: list[QuoteOut]) -> str:
@@ -122,6 +133,7 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
         stable = [i for i in items if i.severity == "STABLE" or i.first_seen]
 
     last_seen_values = [as_utc(s.last_seen_at) for s in states.values() if s.last_seen_at]
+    markets = _markets(items + unavailable)
     return DashboardOut(
         greeting=_greeting(user),
         baseline_at=baseline_at,
@@ -131,7 +143,8 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
         meaningful_changes=len(meaningful),
         needs_attention=len(needs),
         stable_count=len(stable),
-        market_state=market_state(now),
+        market_state="OPEN" if any(m.state == "OPEN" for m in markets) else (markets[0].state if markets else market_state(now)),
+        markets=markets,
         data_status=_overall_status(items) if items else ("UNAVAILABLE" if symbols else "LIVE"),  # type: ignore[arg-type]
         needs_attention_items=needs,
         meaningful_items=meaningful,

@@ -20,6 +20,13 @@ class NormalizedQuote:
     data_status: str
     market_state: str
     sparkline: list[float] = field(default_factory=list)
+    # Exchange context. Every provider fills these; the service never assumes US/USD.
+    currency: str = "USD"
+    exchange: str = ""  # Yahoo exchange code, e.g. NSI, NMS, LSE
+    exchange_name: str = ""  # human label, e.g. NSE, NasdaqGS
+    timezone: str = ""  # IANA zone of the exchange
+    session_start: datetime | None = None  # today's regular session, if the provider knows it
+    session_end: datetime | None = None
 
 
 class MarketDataProvider(Protocol):

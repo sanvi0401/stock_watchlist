@@ -18,6 +18,9 @@ export type Quote = {
   week_52_high: number
   week_52_low: number
   sparkline: number[]
+  currency: string
+  exchange: string
+  exchange_name: string
   timestamp: string
   source: string
   data_status: DataStatus
@@ -45,6 +48,8 @@ export type Watchlist = {
   unavailable_count: number
 }
 
+export type Market = { exchange: string; exchange_name: string; state: MarketState }
+
 export type Dashboard = {
   greeting: string
   baseline_at: string | null
@@ -55,6 +60,7 @@ export type Dashboard = {
   needs_attention: number
   stable_count: number
   market_state: MarketState
+  markets: Market[]
   data_status: DataStatus
   needs_attention_items: Quote[]
   meaningful_items: Quote[]
@@ -69,6 +75,9 @@ export type SearchHit = {
   company_name: string
   current_price: number | null
   price_change_percent: number | null
+  currency: string
+  exchange: string
+  exchange_name: string
   data_status: DataStatus
   market_state: MarketState
 }
@@ -82,6 +91,7 @@ export type HistoryItem = {
   severity: Severity
   baseline_price: number
   current_price: number
+  currency: string
   since_last_check_percent: number
   explanation: string
   evidence: string[]
@@ -116,6 +126,8 @@ export type Health = {
   cache: 'redis' | 'memory'
   persistence: 'durable' | 'ephemeral'
   market_state: MarketState
+  markets: Market[]
+  provider_cooldown_seconds: number
   server_time: string
 }
 

@@ -27,6 +27,9 @@ def quote_out(result: ChangeResult, quote: NormalizedQuote) -> QuoteOut:
         week_52_high=quote.week_52_high,
         week_52_low=quote.week_52_low,
         sparkline=[round(float(x), 4) for x in (quote.sparkline or [])],
+        currency=quote.currency,
+        exchange=quote.exchange,
+        exchange_name=quote.exchange_name,
         timestamp=quote.timestamp,
         source=quote.source,
         data_status=result.data_status,  # type: ignore[arg-type]
@@ -41,6 +44,9 @@ def quote_out(result: ChangeResult, quote: NormalizedQuote) -> QuoteOut:
 
 
 def unavailable_out(symbol: str, explanation: str) -> QuoteOut:
+    from app.market.freshness import exchange_for
+
+    info = exchange_for(None, symbol)
     return QuoteOut(
         symbol=symbol,
         company_name=symbol,
@@ -55,8 +61,11 @@ def unavailable_out(symbol: str, explanation: str) -> QuoteOut:
         week_52_low=0,
         timestamp=datetime.now(UTC),
         source="none",
+        currency=info.currency,
+        exchange=info.code,
+        exchange_name=info.name,
         data_status="UNAVAILABLE",
-        market_state=market_state(),
+        market_state=market_state(exchange=info.code),
         change_type="data_unavailable",
         explanation=explanation,
     )

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../services/api'
 import type { SearchHit, Watchlist } from '../types'
-import { Button, DataBadge, Delta, ErrorState, Input, Modal, SeverityPill, Skeleton } from '../components/ui'
+import { Button, DataBadge, Delta, ErrorState, ExchangeTag, Input, Modal, SeverityPill, Skeleton } from '../components/ui'
 import { fmtPrice, fmtRelative } from '../utils/format'
 
 export default function WatchlistDetailPage() {
@@ -84,8 +84,8 @@ export default function WatchlistDetailPage() {
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.symbol} className="border-t border-[#232F46] hover:bg-[#1A2234]">
-                    <td className="px-3 py-3"><Link className="font-mono" to={`/app/stocks/${s.symbol}`}>{s.symbol}</Link><p className="text-xs text-[#94A3B8]">{s.quote?.company_name ?? 'no data'}</p></td>
-                    <td className="px-3 py-3 font-mono">{s.quote ? fmtPrice(s.quote.current_price) : '—'}</td>
+                    <td className="px-3 py-3"><Link className="font-mono" to={`/app/stocks/${s.symbol}`}>{s.symbol}</Link> {s.quote ? <ExchangeTag name={s.quote.exchange_name} state={s.quote.market_state} /> : null}<p className="text-xs text-[#94A3B8]">{s.quote?.company_name ?? 'no data'}</p></td>
+                    <td className="px-3 py-3 font-mono">{s.quote ? fmtPrice(s.quote.current_price, s.quote.currency) : '—'}</td>
                     <td className="px-3 py-3">{s.quote?.first_seen ? <span className="text-xs text-[#94A3B8]">baseline set</span> : <><Delta value={s.quote?.since_last_check_percent} />{s.quote?.baseline_at ? <p className="text-[11px] text-[#94A3B8]">{fmtRelative(s.quote.baseline_at)}</p> : null}</>}</td>
                     <td className="px-3 py-3"><Delta value={s.quote?.price_change_percent} /></td>
                     <td className="px-3 py-3 font-mono">{s.quote ? `${s.quote.significance_score}` : '—'}</td>
@@ -105,7 +105,7 @@ export default function WatchlistDetailPage() {
       )}
       <Modal open={addOpen} title="Add a company or ticker" onClose={() => { setAddOpen(false); setQuery(''); setHints([]) }}>
         <form onSubmit={add} className="space-y-3">
-          <Input name="symbol" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Google, NVIDIA, GOOGL…" required />
+          <Input name="symbol" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Reliance, TCS.NS, NVIDIA, GOOGL…" required />
           {hints.length > 0 ? (
             <ul className="max-h-40 overflow-auto rounded border border-[#232F46] text-sm">
               {hints.map((h) => (
@@ -124,7 +124,7 @@ export default function WatchlistDetailPage() {
                       }
                     }}
                   >
-                    <span><span className="font-mono">{h.symbol}</span> · {h.company_name}</span>
+                    <span><span className="font-mono">{h.symbol}</span> <ExchangeTag name={h.exchange_name} /> · {h.company_name}</span>
                     <span className="text-primary">Add</span>
                   </button>
                 </li>

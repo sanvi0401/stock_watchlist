@@ -28,6 +28,9 @@ def search_stocks(
                 company_name=quote.company_name,
                 current_price=quote.price,
                 price_change_percent=round(day, 2),
+                currency=quote.currency,
+                exchange=quote.exchange,
+                exchange_name=quote.exchange_name,
                 data_status=quote.data_status,  # type: ignore[arg-type]
                 market_state=quote.market_state,
             )

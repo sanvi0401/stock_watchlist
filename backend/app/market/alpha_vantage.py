@@ -44,6 +44,7 @@ class AlphaVantageProvider:
                 source=self.source,
                 data_status="DELAYED",
                 market_state="UNKNOWN",
+                exchange="",
             )
         except Exception:  # noqa: BLE001
             return None

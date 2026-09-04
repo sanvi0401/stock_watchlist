@@ -25,7 +25,7 @@ export function LandingPage() {
       <section className="mx-auto max-w-3xl px-6 py-20 text-center">
         <h1 className="text-4xl font-semibold tracking-tight md:text-[40px] md:leading-[48px]">Know what changed. Know what matters.</h1>
         <p className="mt-4 text-on-surface-variant">
-          Smart Market Watch remembers what you last saw, scores unusual movement against each name’s own volatility, and tells you why it deserves attention.
+          Smart Market Watch remembers what you last saw, scores unusual movement against each name’s own volatility, and tells you why it deserves attention. NSE, BSE, US and other Yahoo-covered exchanges.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link to="/signup"><Button>Get Started</Button></Link>
@@ -35,7 +35,7 @@ export function LandingPage() {
       <section id="features" className="mx-auto grid max-w-6xl gap-4 px-6 pb-16 md:grid-cols-3">
         {[
           ['Track', 'Last-seen baselines per symbol, not a generic price ticker. We remember the last price you actually looked at.'],
-          ['Detect', 'Significance from price abnormality, volume, and volatility — not raw %. A 2% move in NVDA is not the same as 2% in COST.'],
+          ['Detect', 'Significance from price abnormality, volume, and volatility — not raw %. A 2% move in TCS is not the same as 2% in a small cap.'],
           ['Understand', 'Plain-language “why this matters” on every high-priority move, with evidence you can audit.'],
         ].map(([t, b]) => (
           <Card key={t}>
@@ -63,7 +63,7 @@ export function LandingPage() {
             </div>
             <div>
               <h3 className="font-semibold text-primary">Data honesty</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">Quotes are labeled LIVE, DELAYED, STALE, or UNAVAILABLE. Yahoo delayed quotes are the default. Unavailable prints never overwrite a valid last-seen price.</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">Quotes are labeled LIVE, DELAYED, STALE, or UNAVAILABLE using each exchange’s own hours. Yahoo delayed quotes are the default. Unavailable prints never overwrite a valid last-seen price.</p>
             </div>
           </div>
         </Card>
@@ -74,7 +74,7 @@ export function LandingPage() {
           <h2 className="mt-1 text-2xl font-semibold">How a check is calculated</h2>
           <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm text-[#CBD5E1]">
             <li>Load your previous last-seen price for each symbol on your watchlists.</li>
-            <li>Fetch a delayed Yahoo quote (price, previous close, volume, 52-week range, short sparkline).</li>
+            <li>Fetch a delayed Yahoo quote for that exchange (price in its own currency, previous close, volume, 52-week range, recent closes, session hours).</li>
             <li>Compute percent change since you last looked, and today’s percent vs previous close.</li>
             <li>Score the move against that symbol’s recent volatility and whether volume is unusual.</li>
             <li>Write a short explanation, rank HIGH → MEANINGFUL → NOTABLE → STABLE, then record this visit so the next one compares against it.</li>

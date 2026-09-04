@@ -11,7 +11,7 @@ from app.config import settings
 from app.db import Base, engine
 from app.errors import unhandled_exception_handler
 from app.routers import auth, changes, dashboard, settings as settings_router, stocks, watchlists
-from app.schemas import HealthOut
+from app.schemas import HealthOut, MarketOut
 from app.worker import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
@@ -53,20 +53,23 @@ async def http_exc(_request, exc: HTTPException):
 @app.get("/health", response_model=HealthOut)
 def health() -> HealthOut:
     from app.cache import get_redis
-    from app.market.freshness import market_state
-    from app.market.service import market_service
+    from app.market.freshness import major_markets, market_state
+    from app.market.service import market_service, provider_cooldown_remaining
 
     return HealthOut(
         environment=settings.environment,
         provider=market_service.provider_name,
         cache="redis" if get_redis() else "memory",
         persistence=settings.persistence_mode,
-        market_state=market_state(),
+        market_state=market_state(exchange="NSI"),
+        markets=[MarketOut(**m) for m in major_markets()],
+        provider_cooldown_seconds=provider_cooldown_remaining(),
         server_time=datetime.now(UTC),
     )
 
 
 app.include_router(auth.router)
+app.include_router(auth.limited)
 app.include_router(watchlists.router)
 app.include_router(dashboard.router)
 app.include_router(stocks.router)
