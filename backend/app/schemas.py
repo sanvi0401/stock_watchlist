@@ -11,6 +11,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     onboarding_complete: bool = False
+    identity_token: str | None = None
 
 
 class RegisterRequest(BaseModel):
@@ -22,10 +23,12 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    identity_backup: str | None = None
 
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+    identity_backup: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -42,6 +45,7 @@ class UserOut(BaseModel):
     onboarding_complete: bool
     sensitivity: str
     lookback_mode: str
+    identity_token: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -58,7 +62,8 @@ class WatchlistUpdate(BaseModel):
 
 
 class AddStockRequest(BaseModel):
-    symbol: str = Field(min_length=1, max_length=16)
+    symbol: str = Field(min_length=1, max_length=80)
+    watchlist_id: int | None = None
 
 
 class QuoteOut(BaseModel):
@@ -103,6 +108,7 @@ class WatchlistOut(BaseModel):
     attention_count: int = 0
     meaningful_count: int = 0
     stable_count: int = 0
+    identity_token: str | None = None
 
 
 class DashboardOut(BaseModel):

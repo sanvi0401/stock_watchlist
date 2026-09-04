@@ -69,7 +69,7 @@ export default function AppShell() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search stocks, tickers, or anomaly tags (e.g. NVDA, high volume)..."
+              placeholder="Search Google, NVIDIA, Apple, or a ticker…"
               className="h-9 w-full rounded border border-[#232F46] bg-[#0B0F17] px-3 pr-12 text-sm"
             />
             <span className="absolute right-2 top-1.5 rounded bg-[#1A2234] px-1.5 font-mono text-[11px] text-[#94A3B8]">⌘K</span>

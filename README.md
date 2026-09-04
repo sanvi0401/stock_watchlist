@@ -64,7 +64,11 @@ Sign up, complete onboarding (default tickers NVDA/AAPL/MSFT/TSLA), then open Ov
 
 Frontend (Vite) and backend (FastAPI) deploy together. `vercel.json` builds `frontend/dist` and routes `/api/*` to `api/index.py`.
 
-On Vercel the API uses SQLite in `/tmp` and an in-memory cache unless you set `DATABASE_URL` (Postgres) and `REDIS_URL`. Set `SECRET_KEY` in the project environment before going live. Quotes still come from Yahoo (delayed); the function uses the HTTP chart API instead of the `yfinance`/pandas stack.
+On Vercel the API uses SQLite in `/tmp` unless you set `DATABASE_URL` (Postgres). `/tmp` is wiped when the serverless instance recycles, which is why a later login used to say “email or password is incorrect” even after a successful sign-up. The browser now keeps an encrypted account backup (`mw_identity` in localStorage) and the API restores the user on login, `/me`, and forgot-password. Sessions last 30 days; even an expired JWT is recovered from that backup on this device. Use a durable Postgres URL in production if you need the same account on other browsers.
+
+Forgot password does not send email (no SMTP on this demo). Submit the address on `/forgot-password` and use the reset link shown on the page.
+
+Add stocks by company name (“Google”) or ticker (GOOGL) from Discover (Add on the right of each result), a watchlist, or the global search box.
 
 ```bash
 npx vercel --prod

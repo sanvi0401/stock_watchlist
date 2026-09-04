@@ -10,6 +10,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user
 from app.errors import AppError
+from app.identity import identity_matches_password, pack_identity, restore_user, unpack_identity
 from app.models import PasswordResetToken, User, UserSettings
 from app.schemas import (
     ForgotPasswordRequest,
@@ -41,17 +42,26 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenRespo
     db.add(UserSettings(user_id=user.id))
     db.commit()
     db.refresh(user)
-    return TokenResponse(access_token=create_access_token(str(user.id)), onboarding_complete=False)
+    return TokenResponse(
+        access_token=create_access_token(str(user.id), user.email),
+        onboarding_complete=False,
+        identity_token=pack_identity(db, user),
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    email = body.email.lower()
+    user = db.scalar(select(User).where(User.email == email))
+    backup = unpack_identity(body.identity_backup)
+    if user is None and backup and backup.get("email") == email and identity_matches_password(backup, body.password):
+        user = restore_user(db, backup)
     if not user or not verify_password(body.password, user.password_hash):
         raise AppError(401, "invalid_credentials", "Email or password is incorrect.")
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
+        access_token=create_access_token(str(user.id), user.email),
         onboarding_complete=user.onboarding_complete,
+        identity_token=pack_identity(db, user),
     )
 
 
@@ -62,9 +72,17 @@ def logout(_user: User = Depends(get_current_user)) -> dict:
 
 @router.post("/forgot-password")
 def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
-    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    email = body.email.lower()
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        backup = unpack_identity(body.identity_backup)
+        if backup and backup.get("email") == email:
+            user = restore_user(db, backup)
     if not user:
-        return {"ok": True, "message": "If that email exists, a reset link was issued."}
+        return {
+            "ok": True,
+            "message": "If that email is on file, use the reset link we show after a match. This demo does not send email.",
+        }
     raw = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
     db.add(
@@ -75,12 +93,15 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) 
         )
     )
     db.commit()
-    payload = {"ok": True, "message": "If that email exists, a reset link was issued."}
-    if settings.environment == "development":
-        payload["dev_reset_token"] = raw
-        payload["dev_reset_url"] = f"{settings.public_app_url}/reset-password?token={raw}"
-        _dev_reset_tokens[body.email.lower()] = raw
-    return payload
+    reset_url = f"{settings.public_url}/reset-password?token={raw}"
+    _dev_reset_tokens[email] = raw
+    return {
+        "ok": True,
+        "message": "This deployment cannot send email. Use the reset link below — it expires in 2 hours.",
+        "reset_url": reset_url,
+        "dev_reset_token": raw,
+        "dev_reset_url": reset_url,
+    }
 
 
 @router.post("/reset-password")
@@ -104,5 +125,6 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) ->
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserOut:
+    out = UserOut.model_validate(user)
+    return out.model_copy(update={"identity_token": pack_identity(db, user)})

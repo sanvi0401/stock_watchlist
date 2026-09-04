@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     app_name: str = "Market Watch"
     environment: str = "development"
     secret_key: str = "dev-change-me-in-production"
-    access_token_expire_minutes: int = 60 * 24 * 7
+    access_token_expire_minutes: int = 60 * 24 * 30
     database_url: str = _default_database_url()
     redis_url: str = "redis://127.0.0.1:6379/0"
     cors_origins: str = "http://127.0.0.1:43123,http://localhost:43123"
@@ -35,6 +35,14 @@ class Settings(BaseSettings):
         if prod:
             origins.append(f"https://{prod}")
         return origins or ["http://127.0.0.1:43123"]
+
+    @property
+    def public_url(self) -> str:
+        vercel = os.getenv("VERCEL_URL")
+        if vercel:
+            host = vercel if vercel.startswith("http") else f"https://{vercel}"
+            return host.rstrip("/")
+        return (self.public_app_url or "http://127.0.0.1:43123").rstrip("/")
 
 
 settings = Settings()

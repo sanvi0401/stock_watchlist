@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -18,11 +18,20 @@ from app.main import app
 from app.models import MarketSnapshot, User, UserStockState
 from app.security import hash_password
 
+from sqlalchemy import event
+
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+@event.listens_for(engine, "connect")
+def _fk(dbapi_conn, _connection_record):  # noqa: ANN001
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base.metadata.create_all(bind=engine)
 

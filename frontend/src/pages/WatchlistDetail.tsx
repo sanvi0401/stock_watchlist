@@ -14,9 +14,18 @@ export default function WatchlistDetailPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [why, setWhy] = useState<{ symbol: string; text: string; score: number } | null>(null)
+  const [query, setQuery] = useState('')
+  const [hints, setHints] = useState<import('../types').SearchHit[]>([])
 
   const load = () => api.watchlist(Number(id)).then(setWl).catch((e) => setErr(e.message))
   useEffect(() => { load() }, [id])
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!query.trim()) { setHints([]); return }
+      api.search(query.trim()).then(setHints).catch(() => setHints([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query])
 
   if (err) return <ErrorState message={err} />
   if (!wl) return <Skeleton className="h-96" />
@@ -35,6 +44,8 @@ export default function WatchlistDetailPage() {
     try {
       setWl(await api.addStock(wl!.id, String(fd.get('symbol'))))
       setAddOpen(false)
+      setQuery('')
+      setHints([])
     } catch (ex) {
       setErr((ex as Error).message)
     }
@@ -52,7 +63,7 @@ export default function WatchlistDetailPage() {
         </div>
       </div>
       {wl.stock_count === 0 ? (
-        <p className="mt-8 text-sm text-[#94A3B8]">Empty watchlist — add a ticker to start a last-seen baseline.</p>
+        <p className="mt-8 text-sm text-[#94A3B8]">Empty watchlist — add a company name or ticker to start a last-seen baseline.</p>
       ) : (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -90,8 +101,34 @@ export default function WatchlistDetailPage() {
           </div>
         </>
       )}
-      <Modal open={addOpen} title="Add stock" onClose={() => setAddOpen(false)}>
-        <form onSubmit={add} className="space-y-3"><Input name="symbol" placeholder="NVDA" required /><Button type="submit">Add</Button></form>
+      <Modal open={addOpen} title="Add a company or ticker" onClose={() => { setAddOpen(false); setQuery(''); setHints([]) }}>
+        <form onSubmit={add} className="space-y-3">
+          <Input name="symbol" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Google, NVIDIA, GOOGL…" required />
+          {hints.length > 0 ? (
+            <ul className="max-h-40 overflow-auto rounded border border-[#232F46] text-sm">
+              {hints.map((h) => (
+                <li key={h.symbol}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[#1A2234]"
+                    onClick={async () => {
+                      setWl(await api.addStock(wl!.id, h.symbol))
+                      setAddOpen(false)
+                      setQuery('')
+                      setHints([])
+                    }}
+                  >
+                    <span><span className="font-mono">{h.symbol}</span> · {h.company_name}</span>
+                    <span className="text-primary">Add</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-[#94A3B8]">Type a company name. We’ll resolve it to a ticker, or pick a match above.</p>
+          )}
+          <Button type="submit">Add</Button>
+        </form>
       </Modal>
       <Modal open={renameOpen} title="Rename watchlist" onClose={() => setRenameOpen(false)}>
         <form className="space-y-3" onSubmit={async (e) => {

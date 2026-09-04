@@ -19,6 +19,7 @@ def test_forgot_and_reset():
     client.post("/auth/register", json={"name": "R", "email": email, "password": "password12"})
     forgot = client.post("/auth/forgot-password", json={"email": email})
     assert forgot.status_code == 200
+    assert forgot.json().get("reset_url")
     token = forgot.json().get("dev_reset_token")
     assert token
     bad = client.post("/auth/reset-password", json={"token": "nope", "password": "newpass123"})
@@ -27,3 +28,25 @@ def test_forgot_and_reset():
     assert ok.status_code == 200
     login = client.post("/auth/login", json={"email": email, "password": "newpass123"})
     assert login.status_code == 200
+
+
+def test_login_restores_account_from_identity_backup():
+    email = "persist@test.com"
+    created = client.post("/auth/register", json={"name": "Pat", "email": email, "password": "password12"})
+    ident = created.json()["identity_token"]
+    assert ident
+    from app.models import User, UserSettings
+    from tests.conftest import TestingSession
+
+    db = TestingSession()
+    row = db.query(User).filter_by(email=email).one()
+    db.query(UserSettings).filter(UserSettings.user_id == row.id).delete()
+    db.delete(row)
+    db.commit()
+    db.close()
+    ok = client.post(
+        "/auth/login",
+        json={"email": email, "password": "password12", "identity_backup": ident},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["access_token"]
