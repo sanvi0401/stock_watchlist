@@ -131,6 +131,8 @@ def create_watchlist(
             continue
         seen.add(symbol)
         db.add(WatchlistStock(watchlist_id=wl.id, symbol=symbol))
+    market_service.prefetch(db, list(seen))
+    for symbol in seen:
         _seed_baseline(db, user.id, symbol)
     db.commit()
     db.refresh(wl)
