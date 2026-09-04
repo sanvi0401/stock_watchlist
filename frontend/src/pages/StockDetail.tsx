@@ -4,25 +4,66 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { api } from '../services/api'
 import type { Quote, Watchlist } from '../types'
 import { Button, Card, DataBadge, Delta, ErrorState, SeverityPill, Skeleton, fmtCap, fmtPrice } from '../components/ui'
+import { fmtWhen } from '../utils/format'
+
+const RANGES: { label: string; key: 'since' | '1d' | '5d' | '1mo' | '1y' }[] = [
+  { label: 'Since last check', key: 'since' },
+  { label: '1D', key: '1d' },
+  { label: '5D', key: '5d' },
+  { label: '1M', key: '1mo' },
+  { label: '1Y', key: '1y' },
+]
 
 export default function StockDetailPage() {
   const { symbol } = useParams()
   const [q, setQ] = useState<Quote | null>(null)
   const [err, setErr] = useState('')
-  const [range, setRange] = useState('Since Last Check')
+  const [range, setRange] = useState<(typeof RANGES)[number]['key']>('5d')
+  const [points, setPoints] = useState<Array<{ t: string; p: number }>>([])
+  const [histNote, setHistNote] = useState('')
   const [lists, setLists] = useState<Watchlist[]>([])
   const [added, setAdded] = useState('')
+
   useEffect(() => {
     if (!symbol) return
     api.stock(symbol).then(setQ).catch((e) => setErr(e.message || 'Stock not found'))
     api.watchlists().then(setLists).catch(() => undefined)
   }, [symbol])
+
+  useEffect(() => {
+    if (!symbol || !q) return
+    if (range === 'since') {
+      if (q.previous_price != null && !q.first_seen) {
+        setPoints([
+          { t: 'Last acknowledged', p: q.previous_price },
+          { t: 'Now', p: q.current_price },
+        ])
+        setHistNote('Two real observations: your last acknowledged price and the current snapshot. Not interpolated history.')
+      } else {
+        setPoints([])
+        setHistNote('No acknowledged baseline yet, so there is no “since last check” series.')
+      }
+      return
+    }
+    api
+      .stockHistory(symbol, range)
+      .then((rows) => {
+        setPoints(rows.map((r) => ({ t: fmtWhen(r.timestamp), p: r.close })))
+        setHistNote(
+          rows.length
+            ? `Actual ${range} bars from the market provider (${rows.length} points).`
+            : 'No history returned for this range (provider miss or unsupported interval).',
+        )
+      })
+      .catch(() => {
+        setPoints([])
+        setHistNote('History request failed.')
+      })
+  }, [symbol, range, q])
+
   if (err) return <ErrorState message={err} />
   if (!q) return <Skeleton className="h-96" />
-  const data = Array.from({ length: 12 }).map((_, i) => ({
-    t: i,
-    p: q.previous_price ? q.previous_price + ((q.current_price - q.previous_price) * i) / 11 : q.current_price,
-  }))
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -61,31 +102,43 @@ export default function StockDetailPage() {
       </div>
       <Card>
         <div className="mb-3 flex flex-wrap gap-2">
-          {['Since Last Check', '1D', '5D', '1M', '1Y'].map((r) => (
-            <button key={r} onClick={() => setRange(r)} className={`rounded px-2 py-1 text-xs ${range === r ? 'bg-intel text-white' : 'text-[#94A3B8]'}`}>{r}</button>
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              className={`rounded px-2 py-1 text-xs ${range === r.key ? 'bg-intel text-white' : 'text-[#94A3B8]'}`}
+            >
+              {r.label}
+            </button>
           ))}
         </div>
         <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid stroke="#232F46" />
-              <XAxis dataKey="t" hide />
-              <YAxis domain={['auto', 'auto']} stroke="#94A3B8" width={60} />
-              <Tooltip contentStyle={{ background: '#1A2234', border: '1px solid #2E3E5B' }} />
-              <Line type="monotone" dataKey="p" stroke="#6366F1" dot={false} strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          {points.length >= 2 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={points}>
+                <CartesianGrid stroke="#232F46" />
+                <XAxis dataKey="t" hide />
+                <YAxis domain={['auto', 'auto']} stroke="#94A3B8" width={60} />
+                <Tooltip contentStyle={{ background: '#1A2234', border: '1px solid #2E3E5B' }} />
+                <Line type="linear" dataKey="p" stroke="#6366F1" dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="flex h-full items-center text-sm text-[#94A3B8]">{histNote || 'No series for this range.'}</p>
+          )}
         </div>
-        <p className="mt-2 text-xs text-[#94A3B8]">{q.source} · {new Date(q.timestamp).toLocaleString()} · {q.market_state === 'CLOSED' ? 'Market closed' : 'Session open'}</p>
+        <p className="mt-2 text-xs text-[#94A3B8]">
+          {q.source} · {fmtWhen(q.timestamp)} · {q.market_state} · {histNote}
+        </p>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card accent="#6366F1">
-          <h2 className="text-[11px] uppercase tracking-wider text-[#94A3B8]">What changed since you last checked?</h2>
+          <h2 className="text-[11px] uppercase tracking-wider text-[#94A3B8]">What changed since you last acknowledged a check?</h2>
           <p className="mt-2 font-mono text-2xl"><Delta value={q.since_last_check_percent} /></p>
-          <p className="mt-2 text-sm text-[#CBD5E1]">{q.first_seen ? q.explanation : q.explanation}</p>
+          <p className="mt-2 text-sm text-[#CBD5E1]">{q.explanation}</p>
         </Card>
         <Card>
-          <h2 className="text-[11px] uppercase tracking-wider text-[#94A3B8]">Why this matters</h2>
+          <h2 className="text-[11px] uppercase tracking-wider text-[#94A3B8]">Why this is (or is not) unusual</h2>
           <p className="mt-2 text-sm">{q.explanation}</p>
           <ul className="mt-3 list-disc pl-5 text-sm text-[#94A3B8]">
             {q.evidence.map((e) => <li key={e}>{e}</li>)}
@@ -97,7 +150,7 @@ export default function StockDetailPage() {
           ['Previous close', fmtPrice(q.previous_close)],
           ['Volume', q.volume.toLocaleString()],
           ['Avg volume', q.average_volume.toLocaleString()],
-          ['Volatility', `${(q.volatility * 100).toFixed(1)}%`],
+          ['Recent daily vol (std)', `${(q.volatility * 100).toFixed(1)}%`],
           ['Market cap', fmtCap(q.market_cap)],
           ['52w high', fmtPrice(q.week_52_high)],
           ['52w low', fmtPrice(q.week_52_low)],

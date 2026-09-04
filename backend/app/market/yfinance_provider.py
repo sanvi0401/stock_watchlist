@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 import pandas as pd
 import yfinance as yf
 
-from app.market.mock import MockMarketDataProvider, UNIVERSE
-from app.market.types import NormalizedQuote
+from app.market.calendar import us_equity_session
+from app.market.circuit import ProviderLimited
+from app.market.types import HistoryPoint, NormalizedQuote
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,9 @@ class YFinanceProvider:
         volatility = _num(rets.tail(60).std(), 0.02) or 0.02
         spark = [float(x) for x in hist["Close"].tail(12).tolist() if x == x]
 
-        name = UNIVERSE[symbol]["name"] if symbol in UNIVERSE else symbol
+        from app.market.mock import UNIVERSE
+
+        name = str(UNIVERSE.get(symbol, {}).get("name") or symbol)
         week_high = _num(hist["High"].max(), price)
         week_low = _num(hist["Low"].min(), price)
         ts = datetime.now(UTC)
@@ -62,6 +65,7 @@ class YFinanceProvider:
         except Exception:  # noqa: BLE001
             ts = datetime.now(UTC)
 
+        closes = [float(x) for x in hist["Close"].tail(60).tolist() if x == x]
         return NormalizedQuote(
             symbol=symbol,
             company_name=name,
@@ -76,8 +80,9 @@ class YFinanceProvider:
             timestamp=ts,
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state=us_equity_session(ts),
             sparkline=spark,
+            recent_closes=closes,
         )
 
     def _from_history(self, symbol: str) -> NormalizedQuote | None:
@@ -109,7 +114,7 @@ class YFinanceProvider:
                 return quote
         except Exception:  # noqa: BLE001
             logger.warning("yfinance quote failed for %s", key, exc_info=True)
-        return MockMarketDataProvider().get_quote(key)
+        return None
 
     def search(self, query: str) -> list[NormalizedQuote]:
         q = query.strip()
@@ -135,14 +140,6 @@ class YFinanceProvider:
                 out.append(quote)
             if len(out) >= 8:
                 return out
-
-        mock_hits = MockMarketDataProvider().search(q)
-        for quote in mock_hits:
-            if quote.symbol not in seen:
-                out.append(quote)
-                seen.add(quote.symbol)
-            if len(out) >= 8:
-                break
         return out
 
     def _from_search_row(self, row: dict) -> NormalizedQuote | None:
@@ -154,8 +151,6 @@ class YFinanceProvider:
         if previous_close <= 0:
             previous_close = price
         name = str(row.get("shortname") or row.get("longname") or symbol)
-        if symbol in UNIVERSE:
-            name = UNIVERSE[symbol]["name"]
         volume = _num(row.get("regularMarketVolume"))
         return NormalizedQuote(
             symbol=symbol,
@@ -171,7 +166,7 @@ class YFinanceProvider:
             timestamp=datetime.now(UTC),
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state=us_equity_session(),
             sparkline=[],
         )
 
@@ -185,7 +180,6 @@ class YFinanceProvider:
             return {}
 
         out: dict[str, NormalizedQuote | None] = {k: None for k in unique}
-        mock = MockMarketDataProvider()
         try:
             data = yf.download(
                 tickers=unique,
@@ -201,6 +195,35 @@ class YFinanceProvider:
 
         for key in unique:
             hist = self._slice_download(data, key, len(unique))
-            quote = self._quote_from_hist(key, hist)
-            out[key] = quote if quote else mock.get_quote(key)
+            out[key] = self._quote_from_hist(key, hist)
         return out
+
+    def get_history(self, symbol: str, range_key: str) -> list[HistoryPoint]:
+        period, interval = {
+            "1d": ("1d", "5m"),
+            "5d": ("5d", "1d"),
+            "1mo": ("1mo", "1d"),
+            "1y": ("1y", "1d"),
+        }.get(range_key, ("5d", "1d"))
+        try:
+            hist = yf.Ticker(symbol.upper()).history(period=period, interval=interval, auto_adjust=True)
+        except Exception:  # noqa: BLE001
+            return []
+        if hist is None or getattr(hist, "empty", True):
+            return []
+        points: list[HistoryPoint] = []
+        for idx, row in hist.iterrows():
+            close = _num(row.get("Close"))
+            if close <= 0:
+                continue
+            ts = datetime.now(UTC)
+            try:
+                ts = idx.to_pydatetime()
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=UTC)
+                else:
+                    ts = ts.astimezone(UTC)
+            except Exception:  # noqa: BLE001
+                pass
+            points.append(HistoryPoint(timestamp=ts, close=close, volume=_num(row.get("Volume"))))
+        return points

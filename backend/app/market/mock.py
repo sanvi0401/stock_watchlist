@@ -169,12 +169,17 @@ class MockMarketDataProvider:
         self.force_status = force_status
 
     def _to_quote(self, symbol: str, row: dict) -> NormalizedQuote:
-        status = self.force_status or "LIVE"
+        status = self.force_status or "DELAYED"
         now = datetime.now(UTC)
         if status == "STALE":
             now = now - timedelta(hours=6)
         if status == "DELAYED":
             now = now - timedelta(minutes=15)
+        if status == "LIVE":
+            now = datetime.now(UTC)
+        spark = list(row.get("spark") or [])
+        from app.market.calendar import us_equity_session
+
         return NormalizedQuote(
             symbol=symbol,
             company_name=row["name"],
@@ -189,8 +194,9 @@ class MockMarketDataProvider:
             timestamp=now,
             source=self.source,
             data_status=status,
-            market_state="OPEN" if status != "UNAVAILABLE" else "UNKNOWN",
-            sparkline=list(row.get("spark") or []),
+            market_state="UNKNOWN" if status == "UNAVAILABLE" else us_equity_session(now),
+            sparkline=spark,
+            recent_closes=spark,
         )
 
     def get_quote(self, symbol: str) -> NormalizedQuote | None:
@@ -215,6 +221,21 @@ class MockMarketDataProvider:
                 if quote:
                     out.append(quote)
         return out[:12]
+
+    def get_history(self, symbol: str, range_key: str) -> list:
+        from app.market.types import HistoryPoint
+
+        quote = self.get_quote(symbol)
+        if not quote:
+            return []
+        n = {"1d": 2, "5d": 5, "1mo": 21, "1y": min(len(quote.recent_closes), 60)}.get(range_key, 5)
+        closes = quote.recent_closes[-n:] if quote.recent_closes else [quote.price]
+        now = quote.timestamp
+        out = []
+        for i, c in enumerate(closes):
+            ts = now - timedelta(days=len(closes) - 1 - i)
+            out.append(HistoryPoint(timestamp=ts, close=c, volume=quote.volume))
+        return out
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]:
         return {s.upper(): self.get_quote(s) for s in symbols}

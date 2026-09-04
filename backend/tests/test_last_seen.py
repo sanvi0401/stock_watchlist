@@ -85,17 +85,19 @@ def test_stale_is_not_live():
     assert quote.data_status == "STALE"
 
 
-def test_double_commit_keeps_since_last_check_delta():
+def test_double_get_without_ack_keeps_delta():
     db = TestingSession()
     user = _user(db)
     quote = MockMarketDataProvider().get_quote("NVDA")
     db.add(UserStockState(user_id=user.id, symbol="NVDA", last_seen_at=datetime.now(UTC), last_seen_price=100))
     db.commit()
-    first = compare_and_record(db, user.id, quote, None, commit_last_seen=True)
+    first = compare_and_record(db, user.id, quote, None, commit_last_seen=False)
     db.commit()
-    second = compare_and_record(db, user.id, quote, None, commit_last_seen=True)
+    second = compare_and_record(db, user.id, quote, None, commit_last_seen=False)
     assert first.since_last_check_percent and first.since_last_check_percent > 0
     assert second.since_last_check_percent == first.since_last_check_percent
+    state = db.query(UserStockState).filter_by(user_id=user.id, symbol="NVDA").one()
+    assert state.last_seen_price == 100
 
 
 def test_multiple_stocks():
@@ -103,6 +105,6 @@ def test_multiple_stocks():
     user = _user(db)
     for sym in ("NVDA", "AAPL", "COST"):
         q = MockMarketDataProvider().get_quote(sym)
-        compare_and_record(db, user.id, q, None)
+        compare_and_record(db, user.id, q, None, commit_last_seen=True)
     db.commit()
     assert db.query(UserStockState).filter_by(user_id=user.id).count() == 3

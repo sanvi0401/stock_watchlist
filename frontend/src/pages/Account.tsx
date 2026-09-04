@@ -4,18 +4,17 @@ import { Link } from 'react-router-dom'
 import { api } from '../services/api'
 import { Button, Card, Input, Label } from '../components/ui'
 import { LegalModal } from '../components/LegalModal'
+import { fmtWhen } from '../utils/format'
 
 type SettingsForm = {
   name: string
   email: string
   timezone: string
-  currency: string
   sensitivity: string
   lookback_mode: string
-  email_alerts: boolean
-  push_alerts: boolean
+  in_app_alerts: boolean
   high_significance_only: boolean
-  dark_pool_signals: boolean
+  unusual_volume_emphasis: boolean
   created_at?: string
 }
 
@@ -23,13 +22,11 @@ const EMPTY: SettingsForm = {
   name: '',
   email: '',
   timezone: 'America/New_York',
-  currency: 'USD',
   sensitivity: 'balanced',
   lookback_mode: 'since_last_check',
-  email_alerts: true,
-  push_alerts: true,
+  in_app_alerts: true,
   high_significance_only: false,
-  dark_pool_signals: true,
+  unusual_volume_emphasis: true,
 }
 
 export const TIMEZONES = [
@@ -47,8 +44,6 @@ export const TIMEZONES = [
   'Australia/Sydney',
   'UTC',
 ]
-
-export const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'JPY', 'CAD', 'AUD']
 
 const OUTLIERS = [
   {
@@ -69,9 +64,9 @@ const OUTLIERS = [
 ]
 
 const LOOKBACKS = [
-  { id: 'since_last_check', title: 'Since last check', body: 'Compare to the last price you personally opened.' },
+  { id: 'since_last_check', title: 'Since last check', body: 'Compare to the last price you marked as seen on Overview.' },
   { id: 'previous_close', title: 'Previous close', body: 'Compare to yesterday’s official close, not your last visit.' },
-  { id: 'five_day', title: 'Five-day window', body: 'Compare to the start of the recent sparkline (~five sessions).' },
+  { id: 'five_day', title: 'Five trading sessions', body: 'Compare to the close five sessions ago when enough daily history exists.' },
 ]
 
 function Select({
@@ -136,13 +131,11 @@ function payload(form: SettingsForm) {
   return {
     name: form.name,
     timezone: form.timezone,
-    currency: form.currency,
     sensitivity: form.sensitivity,
     lookback_mode: form.lookback_mode,
-    email_alerts: form.email_alerts,
-    push_alerts: form.push_alerts,
+    in_app_alerts: form.in_app_alerts,
     high_significance_only: form.high_significance_only,
-    dark_pool_signals: form.dark_pool_signals,
+    unusual_volume_emphasis: form.unusual_volume_emphasis,
   }
 }
 
@@ -187,17 +180,12 @@ export function SettingsPage() {
           <div><Label>Full name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><Label>Work email</Label><Input value={form.email} disabled /></div>
           <div>
-            <Label>Timezone</Label>
+            <Label>Timezone (used for all timestamps in the app)</Label>
             <Select value={form.timezone} onChange={(timezone) => setForm({ ...form, timezone })}>
               {TIMEZONES.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}
             </Select>
           </div>
-          <div>
-            <Label>Valuation currency</Label>
-            <Select value={form.currency} onChange={(currency) => setForm({ ...form, currency })}>
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
-          </div>
+          <p className="text-sm text-[#94A3B8] md:col-span-2">Prices are delayed USD prints. Currency conversion is not offered.</p>
         </div>
       </Card>
       <Card>
@@ -215,14 +203,12 @@ export function SettingsPage() {
         />
       </Card>
       <Card>
-        <h2 className="mb-3 font-semibold">Notification protocols</h2>
+        <h2 className="mb-3 font-semibold">In-app alerts (preferences only)</h2>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.email_alerts} onChange={(e) => setForm({ ...form, email_alerts: e.target.checked })} /> Email alerts
+          <input type="checkbox" checked={form.in_app_alerts} onChange={(e) => setForm({ ...form, in_app_alerts: e.target.checked })} />
+          Show change cards on Overview / Notifications
         </label>
-        <label className="mt-2 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.push_alerts} onChange={(e) => setForm({ ...form, push_alerts: e.target.checked })} /> Mobile push
-        </label>
-        <p className="mt-2 text-xs text-[#94A3B8]">This demo stores the preference. It does not send real email or push.</p>
+        <p className="mt-2 text-xs text-[#94A3B8]">This does not send email or push. Meaningful changes appear in the app after you open Overview.</p>
       </Card>
       {err ? <p className="text-sm text-loss">{err}</p> : null}
       {msg ? <p className="text-sm text-gain">{msg}</p> : null}
@@ -245,7 +231,7 @@ export function ProfilePage() {
   useEffect(() => {
     Promise.all([api.me(), api.settings(), api.watchlists()])
       .then(([user, settings, watchlists]) => {
-        const u = user as { name: string; email: string; timezone: string; currency: string; sensitivity: string; lookback_mode: string; onboarding_complete: boolean; created_at?: string }
+        const u = user as { name: string; email: string; timezone: string; sensitivity: string; lookback_mode: string; onboarding_complete: boolean; created_at?: string }
         const s = settings as SettingsForm
         setMe({
           ...EMPTY,
@@ -253,7 +239,6 @@ export function ProfilePage() {
           name: u.name || s.name,
           email: u.email || s.email,
           timezone: u.timezone || s.timezone,
-          currency: u.currency || s.currency,
           sensitivity: u.sensitivity || s.sensitivity,
           lookback_mode: u.lookback_mode || s.lookback_mode,
           created_at: u.created_at || s.created_at,
@@ -268,7 +253,7 @@ export function ProfilePage() {
     e.preventDefault()
     if (!me) return
     try {
-      const saved = await api.patchSettings({ name: me.name, timezone: me.timezone, currency: me.currency }) as SettingsForm
+      const saved = await api.patchSettings({ name: me.name, timezone: me.timezone }) as SettingsForm
       setMe({ ...me, ...saved })
       setMsg('Profile updated.')
       setErr('')
@@ -295,12 +280,6 @@ export function ProfilePage() {
               {TIMEZONES.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}
             </Select>
           </div>
-          <div>
-            <Label>Currency</Label>
-            <Select value={me.currency} onChange={(currency) => setMe({ ...me, currency })}>
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
-          </div>
         </div>
         <Button className="mt-4" type="submit">Save profile</Button>
         {msg ? <p className="mt-2 text-sm text-gain">{msg}</p> : null}
@@ -309,12 +288,12 @@ export function ProfilePage() {
       <Card>
         <h2 className="font-semibold">Account snapshot</h2>
         <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-          <div><dt className="text-[#94A3B8]">Member since</dt><dd>{me.created_at ? new Date(me.created_at).toLocaleString() : 'This session'}</dd></div>
+          <div><dt className="text-[#94A3B8]">Member since</dt><dd>{me.created_at ? fmtWhen(me.created_at) : 'This session'}</dd></div>
           <div><dt className="text-[#94A3B8]">Watchlists</dt><dd>{lists}</dd></div>
           <div><dt className="text-[#94A3B8]">Names tracked</dt><dd>{symbols}</dd></div>
           <div><dt className="text-[#94A3B8]">Outlier mode</dt><dd className="capitalize">{outlier?.title || me.sensitivity}</dd></div>
           <div><dt className="text-[#94A3B8]">Lookback</dt><dd>{lookback?.title || me.lookback_mode}</dd></div>
-          <div><dt className="text-[#94A3B8]">Alerts</dt><dd>{[me.email_alerts ? 'Email' : null, me.push_alerts ? 'Push' : null].filter(Boolean).join(' · ') || 'Off'}</dd></div>
+          <div><dt className="text-[#94A3B8]">In-app alerts</dt><dd>{me.in_app_alerts ? 'On' : 'Off'}</dd></div>
         </dl>
         <p className="mt-4 text-sm text-[#94A3B8]">
           Legal:{' '}
@@ -384,10 +363,10 @@ export function PreferencesPage() {
         <label className="mt-3 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={form.dark_pool_signals}
-            onChange={(e) => void pick({ dark_pool_signals: e.target.checked }, 'Dark-pool preference saved.')}
+            checked={form.unusual_volume_emphasis}
+            onChange={(e) => void pick({ unusual_volume_emphasis: e.target.checked }, e.target.checked ? 'Volume gets more weight in the score.' : 'Volume weight reduced.')}
           />
-          Include unusual volume / dark-pool style flow in Discover clusters
+          Emphasize unusual volume in the significance score (session-scaled vs typical volume; not dark-pool data)
         </label>
       </Card>
       {err ? <p className="text-sm text-loss">{err}</p> : null}
@@ -405,7 +384,7 @@ export function NotificationsPage() {
       <h1 className="text-[30px] font-semibold">Notifications</h1>
       <div className="mt-4 space-y-3">
         {rows.length === 0 ? <p className="text-sm text-[#94A3B8]">No dispatches yet.</p> : rows.map((n) => (
-          <Card key={n.id}><p className="font-semibold">{n.title}</p><p className="text-sm text-[#CBD5E1]">{n.body}</p><p className="text-xs text-[#94A3B8]">{new Date(n.created_at).toLocaleString()}</p></Card>
+          <Card key={n.id}><p className="font-semibold">{n.title}</p><p className="text-sm text-[#CBD5E1]">{n.body}</p><p className="text-xs text-[#94A3B8]">{fmtWhen(n.created_at)}</p></Card>
         ))}
       </div>
     </div>

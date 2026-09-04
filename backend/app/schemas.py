@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.security import MAX_PASSWORD_BYTES
+
 Severity = Literal["STABLE", "NOTABLE", "MEANINGFUL", "HIGH"]
 DataStatus = Literal["LIVE", "DELAYED", "STALE", "UNAVAILABLE"]
 
@@ -11,29 +13,33 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     onboarding_complete: bool = False
-    identity_token: str | None = None
+    expires_in: int | None = None
 
 
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
-    identity_backup: str | None = None
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_BYTES)
 
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    identity_backup: str | None = None
+
+
+class ForgotPasswordResponse(BaseModel):
+    ok: bool = True
+    message: str
+    dev_reset_token: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
 
 class UserOut(BaseModel):
@@ -41,11 +47,9 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     timezone: str
-    currency: str
     onboarding_complete: bool
     sensitivity: str
     lookback_mode: str
-    identity_token: str | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -93,6 +97,12 @@ class QuoteOut(BaseModel):
     evidence: list[str] = []
 
 
+class HistoryPointOut(BaseModel):
+    timestamp: datetime
+    close: float
+    volume: float = 0
+
+
 class WatchlistStockOut(BaseModel):
     symbol: str
     added_at: datetime
@@ -109,7 +119,6 @@ class WatchlistOut(BaseModel):
     attention_count: int = 0
     meaningful_count: int = 0
     stable_count: int = 0
-    identity_token: str | None = None
 
 
 class DashboardOut(BaseModel):
@@ -127,6 +136,7 @@ class DashboardOut(BaseModel):
     stable_items: list[QuoteOut]
     unavailable_items: list[QuoteOut] = []
     first_time: bool = False
+    baseline_advances_on: str = "acknowledge"
 
 
 class HistoryItem(BaseModel):
@@ -149,26 +159,28 @@ class SettingsOut(BaseModel):
     name: str
     email: EmailStr
     timezone: str
-    currency: str
     sensitivity: str
     lookback_mode: str
-    email_alerts: bool
-    push_alerts: bool
+    in_app_alerts: bool
     high_significance_only: bool
-    dark_pool_signals: bool
+    unusual_volume_emphasis: bool
     created_at: datetime | None = None
+    alerts_note: str = (
+        "Preferences only. This app does not send email or push; changes appear in-app on Overview."
+    )
+    prices_note: str = "Prices are shown in USD as reported by the delayed quote feed. FX conversion is not implemented."
 
 
 class SettingsPatch(BaseModel):
     name: str | None = None
     timezone: str | None = None
-    currency: str | None = None
     sensitivity: str | None = None
     lookback_mode: str | None = None
-    email_alerts: bool | None = None
-    push_alerts: bool | None = None
+    in_app_alerts: bool | None = None
+    email_alerts: bool | None = None  # accepted then mapped to in_app; not a mailer
+    push_alerts: bool | None = None  # ignored as a delivery channel
     high_significance_only: bool | None = None
-    dark_pool_signals: bool | None = None
+    unusual_volume_emphasis: bool | None = None
     onboarding_complete: bool | None = None
 
 
@@ -190,3 +202,10 @@ class SearchResult(BaseModel):
     price_change_percent: float | None
     data_status: DataStatus
     market_state: str
+
+
+class AcknowledgeOut(BaseModel):
+    ok: bool = True
+    acknowledged_at: datetime
+    symbols: list[str]
+    message: str

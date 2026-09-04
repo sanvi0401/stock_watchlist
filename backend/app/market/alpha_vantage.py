@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import httpx
 
 from app.config import settings
+from app.market.calendar import us_equity_session
 from app.market.types import NormalizedQuote
 
 
@@ -40,11 +41,11 @@ class AlphaVantageProvider:
                 market_cap=0,
                 week_52_high=price,
                 week_52_low=price,
-                timestamp=datetime.now(UTC),
-                source=self.source,
-                data_status="DELAYED",
-                market_state="OPEN",
-            )
+            timestamp=datetime.now(UTC),
+            source=self.source,
+            data_status="DELAYED",
+            market_state=us_equity_session(),
+        )
         except Exception:  # noqa: BLE001
             return None
 
@@ -54,3 +55,6 @@ class AlphaVantageProvider:
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]:
         return {s.upper(): self.get_quote(s) for s in symbols}
+
+    def get_history(self, symbol: str, range_key: str) -> list:
+        return []

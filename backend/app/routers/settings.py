@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.db import get_db
 from app.deps import get_current_user
@@ -17,13 +18,11 @@ def _settings(user: User, prefs: UserSettings | None) -> SettingsOut:
         name=user.name,
         email=user.email,
         timezone=user.timezone,
-        currency=user.currency,
         sensitivity=user.sensitivity,
         lookback_mode=user.lookback_mode,
-        email_alerts=prefs.email_alerts,
-        push_alerts=prefs.push_alerts,
+        in_app_alerts=prefs.email_alerts,
         high_significance_only=prefs.high_significance_only,
-        dark_pool_signals=prefs.dark_pool_signals,
+        unusual_volume_emphasis=prefs.unusual_volume_emphasis,
         created_at=user.created_at,
     )
 
@@ -51,12 +50,22 @@ def patch_settings(
         "five_day",
     }:
         raise AppError(400, "invalid_lookback", "Choose a valid lookback window.")
-    for key in ("name", "timezone", "currency", "sensitivity", "lookback_mode", "onboarding_complete"):
+    if data.get("timezone"):
+        try:
+            ZoneInfo(str(data["timezone"]))
+        except (ZoneInfoNotFoundError, KeyError):
+            raise AppError(400, "invalid_timezone", "Unknown IANA timezone.") from None
+    for key in ("name", "timezone", "sensitivity", "lookback_mode", "onboarding_complete"):
         if key in data and data[key] is not None:
             setattr(user, key, data[key])
-    for key in ("email_alerts", "push_alerts", "high_significance_only", "dark_pool_signals"):
-        if key in data and data[key] is not None:
-            setattr(prefs, key, data[key])
+    if "in_app_alerts" in data and data["in_app_alerts"] is not None:
+        prefs.email_alerts = data["in_app_alerts"]
+    elif "email_alerts" in data and data["email_alerts"] is not None:
+        prefs.email_alerts = data["email_alerts"]
+    if "high_significance_only" in data and data["high_significance_only"] is not None:
+        prefs.high_significance_only = data["high_significance_only"]
+    if "unusual_volume_emphasis" in data and data["unusual_volume_emphasis"] is not None:
+        prefs.unusual_volume_emphasis = data["unusual_volume_emphasis"]
     db.commit()
     db.refresh(user)
     return _settings(user, prefs)

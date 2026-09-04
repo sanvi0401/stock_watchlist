@@ -4,6 +4,13 @@ from typing import Protocol
 
 
 @dataclass
+class HistoryPoint:
+    timestamp: datetime
+    close: float
+    volume: float = 0.0
+
+
+@dataclass
 class NormalizedQuote:
     symbol: str
     company_name: str
@@ -20,6 +27,7 @@ class NormalizedQuote:
     data_status: str
     market_state: str
     sparkline: list[float] = field(default_factory=list)
+    recent_closes: list[float] = field(default_factory=list)
 
 
 class MarketDataProvider(Protocol):
@@ -28,3 +36,5 @@ class MarketDataProvider(Protocol):
     def search(self, query: str) -> list[NormalizedQuote]: ...
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]: ...
+
+    def get_history(self, symbol: str, range_key: str) -> list[HistoryPoint]: ...

@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 
 import httpx
 
-from app.market.mock import MockMarketDataProvider, UNIVERSE
-from app.market.types import NormalizedQuote
+from app.market.calendar import us_equity_session
+from app.market.circuit import ProviderLimited
+from app.market.types import HistoryPoint, NormalizedQuote
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class YahooHttpProvider:
             volatility = 0.02
 
         spark = [float(x) for x in closes[-12:]]
-        name = UNIVERSE[symbol]["name"] if symbol in UNIVERSE else str(meta.get("shortName") or symbol)
+        name = str(meta.get("shortName") or symbol)
         ts = datetime.now(UTC)
         try:
             stamps = result.get("timestamp") or []
@@ -102,8 +103,9 @@ class YahooHttpProvider:
             timestamp=ts,
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state=us_equity_session(ts),
             sparkline=spark,
+            recent_closes=[float(x) for x in closes[-60:]],
         )
 
     def get_quote(self, symbol: str) -> NormalizedQuote | None:
@@ -114,9 +116,13 @@ class YahooHttpProvider:
             quote = self._from_chart(key)
             if quote:
                 return quote
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code == 429:
+                raise ProviderLimited(60) from exc
+            logger.warning("yahoo http quote failed for %s", key, exc_info=True)
         except Exception:  # noqa: BLE001
             logger.warning("yahoo http quote failed for %s", key, exc_info=True)
-        return MockMarketDataProvider().get_quote(key)
+        return None
 
     def search(self, query: str) -> list[NormalizedQuote]:
         q = query.strip()
@@ -150,11 +156,7 @@ class YahooHttpProvider:
                     quote.company_name = names[symbol]
                 out.append(quote)
         if len(out) < 8:
-            for quote in MockMarketDataProvider().search(q):
-                if quote.symbol not in {x.symbol for x in out}:
-                    out.append(quote)
-                if len(out) >= 8:
-                    break
+            return out
         return out
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]:
@@ -173,6 +175,48 @@ class YahooHttpProvider:
                 key = futs[fut]
                 try:
                     out[key] = fut.result()
+                except ProviderLimited:
+                    raise
                 except Exception:  # noqa: BLE001
-                    out[key] = MockMarketDataProvider().get_quote(key)
+                    out[key] = None
         return out
+
+    def get_history(self, symbol: str, range_key: str) -> list[HistoryPoint]:
+        key = symbol.upper().strip()
+        params = {
+            "1d": {"interval": "5m", "range": "1d"},
+            "5d": {"interval": "1d", "range": "5d"},
+            "1mo": {"interval": "1d", "range": "1mo"},
+            "1y": {"interval": "1d", "range": "1y"},
+        }.get(range_key, {"interval": "1d", "range": "5d"})
+        try:
+            resp = self._client.get(_CHART.format(symbol=key), params=params)
+            if resp.status_code == 429:
+                raise ProviderLimited(60)
+            resp.raise_for_status()
+            payload = resp.json()
+        except ProviderLimited:
+            raise
+        except Exception:  # noqa: BLE001
+            return []
+        results = (payload.get("chart") or {}).get("result") or []
+        if not results:
+            return []
+        result = results[0]
+        quotes = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+        closes = quotes.get("close") or []
+        volumes = quotes.get("volume") or []
+        stamps = result.get("timestamp") or []
+        points: list[HistoryPoint] = []
+        for i, close in enumerate(closes):
+            if close is None:
+                continue
+            ts = datetime.now(UTC)
+            if i < len(stamps):
+                try:
+                    ts = datetime.fromtimestamp(int(stamps[i]), tz=UTC)
+                except (TypeError, ValueError, OSError):
+                    pass
+            vol = _num(volumes[i] if i < len(volumes) else 0)
+            points.append(HistoryPoint(timestamp=ts, close=float(close), volume=vol))
+        return points

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../services/api'
 import type { Dashboard, Quote } from '../types'
 import { Button, Card, DataBadge, Delta, EmptyState, ErrorState, SeverityPill, Skeleton, fmtPrice } from '../components/ui'
+import { fmtWhen } from '../utils/format'
 
 function QuoteCard({ q }: { q: Quote }) {
   return (
@@ -31,6 +32,8 @@ function QuoteCard({ q }: { q: Quote }) {
 export default function OverviewPage() {
   const [data, setData] = useState<Dashboard | null>(null)
   const [err, setErr] = useState('')
+  const [ackMsg, setAckMsg] = useState('')
+  const [acking, setAcking] = useState(false)
   useEffect(() => {
     api.dashboard().then(setData).catch((e) => setErr(e.message))
   }, [])
@@ -46,12 +49,35 @@ export default function OverviewPage() {
       <div>
         <h1 className="text-[30px] font-semibold leading-[38px]">{data.greeting}</h1>
         <p className="mt-1 text-sm text-[#94A3B8]">
-          {data.first_time ? 'First check: baselines recorded. Come back later to see what meaningfully changed.' : `Last checked ${data.last_checked_at ? new Date(data.last_checked_at).toLocaleString() : '—'}`}
+          {data.first_time
+            ? 'No acknowledged baseline yet. Prices are shown for context. Mark this check as seen when you have reviewed it.'
+            : `Last acknowledged check ${data.last_checked_at ? fmtWhen(data.last_checked_at) : '—'}`}
           {' · '}
-          {data.market_state === 'CLOSED' ? 'Market closed' : 'US session'}
+          {data.market_state === 'CLOSED' ? 'US regular session closed' : data.market_state === 'PRE' ? 'Pre-market' : data.market_state === 'OPEN' ? 'US regular session' : data.market_state}
           {' · '}
           <DataBadge status={data.data_status} />
         </p>
+        <div className="mt-3">
+          <Button
+            disabled={acking}
+            onClick={async () => {
+              setAcking(true)
+              try {
+                const res = await api.acknowledge()
+                setAckMsg(res.message)
+                const next = await api.dashboard()
+                setData(next)
+              } catch (e) {
+                setErr((e as Error).message)
+              } finally {
+                setAcking(false)
+              }
+            }}
+          >
+            {acking ? 'Saving…' : 'Mark this check as seen'}
+          </Button>
+          {ackMsg ? <p className="mt-2 text-xs text-gain">{ackMsg}</p> : null}
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -74,7 +100,7 @@ export default function OverviewPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">Meaningful changes</h2>
         {data.meaningful_items.length === 0 ? (
-          <p className="text-sm text-[#94A3B8]">No notable or meaningful moves since last check.</p>
+          <p className="text-sm text-[#94A3B8]">No notable or meaningful moves versus your last acknowledged check.</p>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">{data.meaningful_items.map((q) => <QuoteCard key={q.symbol} q={q} />)}</div>
         )}

@@ -1,18 +1,17 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from datetime import UTC, datetime, timedelta
-
+from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user
-from app.config import settings
 from app.errors import AppError
-from app.identity import pack_identity
 from app.intelligence.last_seen import compare_and_record
 from app.market.mock import UNIVERSE
 from app.market.service import market_service
-from app.models import User, UserStockState, Watchlist, WatchlistStock
+from app.models import User, UserSettings, UserStockState, Watchlist, WatchlistStock
 from app.schemas import AddStockRequest, QuoteOut, WatchlistCreate, WatchlistOut, WatchlistStockOut, WatchlistUpdate
 from app.symbols import resolve_to_symbol
 
@@ -48,31 +47,24 @@ def _quote_out(result, quote, company: str) -> QuoteOut:
 
 
 def _seed_baseline(db: Session, user_id: int, symbol: str) -> None:
+    """Demo-only: mock provider may seed an old last-seen so the first screen shows a delta.
+
+    Production / Yahoo providers never invent a prior observation.
+    """
     exists = db.query(UserStockState).filter_by(user_id=user_id, symbol=symbol).one_or_none()
     if exists:
         return
-    if settings.market_data_provider == "mock":
-        demo = UNIVERSE.get(symbol, {}).get("last_seen_demo")
-        if demo is None:
-            return
-        db.add(
-            UserStockState(
-                user_id=user_id,
-                symbol=symbol,
-                last_seen_at=datetime.now(UTC) - timedelta(hours=14),
-                last_seen_price=float(demo),
-            )
-        )
+    if settings.market_data_provider != "mock":
         return
-    quote, _snap = market_service.get_quote(db, symbol)
-    if not quote:
+    demo = UNIVERSE.get(symbol, {}).get("last_seen_demo")
+    if demo is None:
         return
     db.add(
         UserStockState(
             user_id=user_id,
             symbol=symbol,
             last_seen_at=datetime.now(UTC) - timedelta(hours=14),
-            last_seen_price=float(quote.previous_close),
+            last_seen_price=float(demo),
         )
     )
 
@@ -81,7 +73,18 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
     stocks = []
     attention = meaningful = stable = 0
     if with_quotes:
-        market_service.prefetch(db, [row.symbol for row in wl.stocks])
+        symbols = [row.symbol for row in wl.stocks]
+        market_service.prefetch(db, symbols)
+        prefs = db.scalar(select(UserSettings).where(UserSettings.user_id == user.id))
+        emphasize = bool(prefs.unusual_volume_emphasis) if prefs else True
+        states = {}
+        if symbols:
+            for st in db.scalars(
+                select(UserStockState).where(
+                    UserStockState.user_id == user.id, UserStockState.symbol.in_(symbols)
+                )
+            ).all():
+                states[st.symbol] = st
         for row in wl.stocks:
             quote, snap = market_service.get_quote(db, row.symbol)
             if not quote:
@@ -93,8 +96,11 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
                 quote,
                 snap.id if snap else None,
                 commit_last_seen=False,
+                persist_history=False,
                 sensitivity=user.sensitivity,
                 lookback_mode=user.lookback_mode,
+                emphasize_volume=emphasize,
+                state=states.get(row.symbol),
             )
             qout = _quote_out(result, quote, quote.company_name)
             stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=qout))
@@ -114,7 +120,6 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
         attention_count=attention,
         meaningful_count=meaningful,
         stable_count=stable,
-        identity_token=pack_identity(db, user),
     )
 
 
@@ -214,7 +219,11 @@ def add_stock(
         raise AppError(404, "not_found", "Watchlist not found.")
     symbol = resolve_to_symbol(db, body.symbol)
     if not symbol:
-        raise AppError(404, "invalid_stock", "We couldn't find that company or ticker. Try a name like Google or a symbol like GOOGL.")
+        raise AppError(
+            404,
+            "invalid_stock",
+            "We couldn't find that company or ticker. Try a name like Google or a symbol like GOOGL.",
+        )
     quote, _snap = market_service.get_quote(db, symbol)
     if not quote:
         raise AppError(404, "invalid_stock", "We couldn't find that symbol.")

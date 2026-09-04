@@ -60,9 +60,7 @@ def test_yfinance_search_uses_yahoo_fields_without_history():
     assert results[0].source == "yfinance"
 
 
-def test_yfinance_falls_back_to_mock_on_failure():
+def test_yfinance_returns_none_on_failure():
     with patch("app.market.yfinance_provider.yf.Ticker", side_effect=RuntimeError("boom")):
         quote = YFinanceProvider().get_quote("COST")
-    assert quote is not None
-    assert quote.source == "mock-terminal"
-    assert quote.symbol == "COST"
+    assert quote is None

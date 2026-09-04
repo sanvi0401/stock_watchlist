@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api, clearToken, getToken } from '../services/api'
 import { cn } from '../components/ui'
+import { setDisplayTimezone } from '../utils/format'
 
 const links = [
   { to: '/app/overview', label: 'Overview', icon: 'dashboard' },
@@ -16,10 +17,16 @@ export default function AppShell() {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [name, setName] = useState('Analyst')
+  const [session, setSession] = useState('…')
 
   useEffect(() => {
     if (!getToken()) nav('/login')
     api.me().then((u) => setName((u as { name: string }).name)).catch(() => undefined)
+    api.settings().then((s) => {
+      const tz = (s as { timezone?: string }).timezone
+      if (tz) setDisplayTimezone(tz)
+    }).catch(() => undefined)
+    api.marketSession().then((s) => setSession(s.market_state)).catch(() => setSession('UNKNOWN'))
   }, [nav])
 
   return (
@@ -50,9 +57,9 @@ export default function AppShell() {
         </div>
         <div className="p-4">
           <div className="rounded-lg border border-[#232F46] bg-surface-container p-3">
-            <p className="text-xs text-gain">US Markets Open</p>
+            <p className="text-xs text-gain">US session: {session}</p>
             <p className="mt-2 text-sm font-medium">{name}</p>
-            <p className="text-xs text-on-surface-variant">Pro Plan · Analyst</p>
+            <p className="text-xs text-on-surface-variant">Approximate regular hours · not a holiday feed</p>
           </div>
         </div>
       </aside>

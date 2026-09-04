@@ -1,5 +1,4 @@
 const TOKEN_KEY = 'mw_token'
-const IDENTITY_KEY = 'mw_identity'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -11,18 +10,7 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
-}
-
-export function getIdentity() {
-  return localStorage.getItem(IDENTITY_KEY)
-}
-
-export function setIdentity(token?: string | null) {
-  if (token) localStorage.setItem(IDENTITY_KEY, token)
-}
-
-export function clearIdentity() {
-  localStorage.removeItem(IDENTITY_KEY)
+  localStorage.removeItem('mw_identity')
 }
 
 export class ApiError extends Error {
@@ -35,24 +23,11 @@ export class ApiError extends Error {
   }
 }
 
-function captureIdentity(data: unknown) {
-  if (Array.isArray(data)) {
-    data.forEach(captureIdentity)
-    return
-  }
-  if (data && typeof data === 'object' && 'identity_token' in data) {
-    const token = (data as { identity_token?: string }).identity_token
-    if (token) setIdentity(token)
-  }
-}
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const identity = getIdentity()
-  if (identity) headers.set('X-Identity-Backup', identity)
   const res = await fetch(`/api${path}`, { ...init, headers })
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
@@ -63,31 +38,35 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiError(res.status, data.code || 'error', data.message || 'Request failed')
   }
-  captureIdentity(data)
   return data as T
 }
 
 export const api = {
   register: (body: { name: string; email: string; password: string }) =>
-    request<{ access_token: string; onboarding_complete: boolean; identity_token?: string }>('/auth/register', {
+    request<{ access_token: string; onboarding_complete: boolean }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   login: (body: { email: string; password: string }) =>
-    request<{ access_token: string; onboarding_complete: boolean; identity_token?: string }>('/auth/login', {
+    request<{ access_token: string; onboarding_complete: boolean }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ ...body, identity_backup: getIdentity() }),
+      body: JSON.stringify(body),
     }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
   forgot: (email: string) =>
-    request<{ ok: boolean; message?: string; reset_url?: string; dev_reset_token?: string }>('/auth/forgot-password', {
+    request<{ ok: boolean; message?: string; dev_reset_token?: string }>('/auth/forgot-password', {
       method: 'POST',
-      body: JSON.stringify({ email, identity_backup: getIdentity() }),
+      body: JSON.stringify({ email }),
     }),
   reset: (token: string, password: string) =>
     request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   dashboard: () => request<import('../types').Dashboard>('/dashboard'),
+  acknowledge: () =>
+    request<{ ok: boolean; acknowledged_at: string; symbols: string[]; message: string }>(
+      '/dashboard/acknowledge',
+      { method: 'POST' },
+    ),
   watchlists: () => request<import('../types').Watchlist[]>('/watchlists'),
   watchlist: (id: number) => request<import('../types').Watchlist>(`/watchlists/${id}`),
   createWatchlist: (body: { name: string; category?: string; symbols?: string[] }) =>
@@ -104,6 +83,10 @@ export const api = {
     request<import('../types').Watchlist>(`/watchlists/${id}/stocks/${symbol}`, { method: 'DELETE' }),
   search: (q: string) => request<import('../types').SearchHit[]>(`/stocks/search?q=${encodeURIComponent(q)}`),
   stock: (symbol: string) => request<import('../types').Quote>(`/stocks/${symbol}`),
+  stockHistory: (symbol: string, range: '1d' | '5d' | '1mo' | '1y') =>
+    request<Array<{ timestamp: string; close: number; volume: number }>>(
+      `/stocks/${symbol}/history?range=${range}`,
+    ),
   history: (severity?: string, cursor?: number) => {
     const p = new URLSearchParams()
     if (severity) p.set('severity', severity)
@@ -119,6 +102,7 @@ export const api = {
     request<Array<{ id: number; title: string; body: string; read: boolean; created_at: string; kind: string }>>(
       '/notifications',
     ),
+  marketSession: () => request<{ market_state: string }>('/market/session'),
 }
 
 export type SearchHit = {

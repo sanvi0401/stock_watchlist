@@ -29,6 +29,7 @@ class User(Base):
     onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     sensitivity: Mapped[str] = mapped_column(String(16), default="balanced")
     lookback_mode: Mapped[str] = mapped_column(String(32), default="since_last_check")
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -87,8 +88,9 @@ class MarketSnapshot(Base):
     week_52_low: Mapped[float] = mapped_column(Float, default=0)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(64), default="mock")
-    data_status: Mapped[str] = mapped_column(String(16), default="LIVE")
-    market_state: Mapped[str] = mapped_column(String(16), default="OPEN")
+    data_status: Mapped[str] = mapped_column(String(16), default="DELAYED")
+    market_state: Mapped[str] = mapped_column(String(16), default="CLOSED")
+    sparkline: Mapped[str] = mapped_column(Text, default="")
 
 
 class UserStockState(Base):
@@ -107,7 +109,10 @@ class UserStockState(Base):
 
 class DetectedChange(Base):
     __tablename__ = "detected_changes"
-    __table_args__ = (Index("ix_changes_user_detected", "user_id", "detected_at"),)
+    __table_args__ = (
+        Index("ix_changes_user_detected", "user_id", "detected_at"),
+        UniqueConstraint("user_id", "fingerprint", name="uq_user_change_fingerprint"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -117,6 +122,7 @@ class DetectedChange(Base):
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[str] = mapped_column(Text, default="")
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     snapshot_id: Mapped[int | None] = mapped_column(
         ForeignKey("market_snapshots.id", ondelete="SET NULL"), nullable=True
@@ -136,12 +142,14 @@ class PasswordResetToken(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "fingerprint", name="uq_user_notification_fingerprint"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(32), default="change")
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -154,4 +162,4 @@ class UserSettings(Base):
     email_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
     push_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
     high_significance_only: Mapped[bool] = mapped_column(Boolean, default=False)
-    dark_pool_signals: Mapped[bool] = mapped_column(Boolean, default=True)
+    unusual_volume_emphasis: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../services/api'
 import type { SearchHit, Watchlist } from '../types'
@@ -32,11 +32,6 @@ export default function DiscoverPage() {
   }, [q])
 
   const selected = lists.find((l) => l.id === listId)
-  const clusters = useMemo(() => [
-    { title: 'Unusual Institutional Flow', tickers: ['NVDA', 'AVGO'] },
-    { title: 'Quiet Accumulation', tickers: ['COST', 'MSFT'] },
-    { title: 'Earnings Catalyst Ahead', tickers: ['TSLA', 'AMD'] },
-  ], [])
 
   async function addSymbol(symbol: string) {
     setErr('')
@@ -108,20 +103,6 @@ export default function DiscoverPage() {
               >
                 {adding === h.symbol ? 'Adding…' : 'Add'}
               </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
-      <h2 className="mt-10 text-lg font-semibold">Curated algorithmic clusters</h2>
-      <div className="mt-3 grid gap-4 md:grid-cols-3">
-        {clusters.map((c) => (
-          <Card key={c.title}>
-            <h3 className="font-semibold">{c.title}</h3>
-            <p className="mt-2 font-mono text-sm text-primary">{c.tickers.join(' · ')}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {c.tickers.map((t) => (
-                <Button key={t} variant="outline" onClick={() => addSymbol(t)}>Add {t}</Button>
-              ))}
             </div>
           </Card>
         ))}

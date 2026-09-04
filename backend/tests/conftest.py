@@ -1,7 +1,8 @@
 import os
 
+os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
-os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-local-tests-only-32")
 os.environ.setdefault("MARKET_DATA_PROVIDER", "mock")
 os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/15")
 
@@ -17,8 +18,6 @@ from app.db import Base, get_db
 from app.main import app
 from app.models import MarketSnapshot, User, UserStockState
 from app.security import hash_password
-
-from sqlalchemy import event
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
