@@ -14,7 +14,7 @@ Modular monolith:
 - **Backend:** FastAPI + SQLAlchemy (`backend/`)
 - **PostgreSQL:** users, watchlists, shared `market_snapshots`, `user_stock_state`, `detected_changes`
 - **Redis:** latest quote cache (in-memory fallback if Redis is down)
-- **MarketDataService → MarketDataProvider:** Yahoo Finance via `yfinance` by default (delayed quotes). Mock fallback if Yahoo fails. Alpha Vantage when `MARKET_DATA_PROVIDER=alpha_vantage` and `ALPHA_VANTAGE_API_KEY` is set
+- **MarketDataService → MarketDataProvider:** delayed Yahoo Finance quotes. Locally this uses `yfinance` when `MARKET_DATA_PROVIDER=yfinance`. On Vercel it uses Yahoo’s public chart API (`httpx` only) so the serverless function stays under the size limit. Mock fallback if Yahoo fails. Alpha Vantage when `MARKET_DATA_PROVIDER=alpha_vantage` and `ALPHA_VANTAGE_API_KEY` is set
 - **Intelligence:** `backend/app/intelligence/` (`significance.py`, `explanation.py`, `last_seen.py`)
 
 Last-seen flow: load previous `user_stock_state` → fetch current snapshot → compare → score → explain → return → then update last seen. First observation never claims a change. Unavailable quotes never overwrite a valid previous price.
@@ -43,7 +43,8 @@ Create DB user/database `marketwatch` / `marketwatch` if not using Compose.
 
 See `.env.example`. Never commit `.env`.
 
-- `MARKET_DATA_PROVIDER=yfinance` — delayed Yahoo Finance quotes (`pip install yfinance`)
+- `MARKET_DATA_PROVIDER=yfinance` — delayed Yahoo Finance quotes locally (`pip install yfinance`)
+- `MARKET_DATA_PROVIDER=yahoo_http` — delayed Yahoo chart/search HTTP APIs (used automatically on Vercel)
 - `MARKET_DATA_PROVIDER=mock` — deterministic terminal quotes (no network)
 - `MARKET_DATA_PROVIDER=alpha_vantage` + `ALPHA_VANTAGE_API_KEY` — delayed live quotes, mock search fallback if the provider misses
 
@@ -63,7 +64,7 @@ Sign up, complete onboarding (default tickers NVDA/AAPL/MSFT/TSLA), then open Ov
 
 Frontend (Vite) and backend (FastAPI) deploy together. `vercel.json` builds `frontend/dist` and routes `/api/*` to `api/index.py`.
 
-On Vercel the API uses SQLite in `/tmp` and an in-memory cache unless you set `DATABASE_URL` (Postgres) and `REDIS_URL`. Set `SECRET_KEY` in the project environment before going live.
+On Vercel the API uses SQLite in `/tmp` and an in-memory cache unless you set `DATABASE_URL` (Postgres) and `REDIS_URL`. Set `SECRET_KEY` in the project environment before going live. Quotes still come from Yahoo (delayed); the function uses the HTTP chart API instead of the `yfinance`/pandas stack.
 
 ```bash
 npx vercel --prod

@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -7,7 +8,6 @@ from app.cache import cache_get, cache_set
 from app.config import settings
 from app.market.alpha_vantage import AlphaVantageProvider
 from app.market.mock import MockMarketDataProvider
-from app.market.yfinance_provider import YFinanceProvider
 from app.market.types import NormalizedQuote
 from app.models import MarketSnapshot
 
@@ -20,6 +20,13 @@ def _provider():
         return AlphaVantageProvider()
     if name == "mock":
         return MockMarketDataProvider()
+    # Vercel cannot bundle pandas/yfinance under the 225 MB function cap.
+    if os.getenv("VERCEL") or name in {"yahoo", "yahoo_http"}:
+        from app.market.yahoo_http import YahooHttpProvider
+
+        return YahooHttpProvider()
+    from app.market.yfinance_provider import YFinanceProvider
+
     return YFinanceProvider()
 
 
