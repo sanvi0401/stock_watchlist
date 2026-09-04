@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.db import get_db
 from app.deps import get_current_user
+from app.config import settings
 from app.errors import AppError
 from app.intelligence.last_seen import compare_and_record
 from app.market.mock import UNIVERSE
@@ -48,15 +49,28 @@ def _seed_baseline(db: Session, user_id: int, symbol: str) -> None:
     exists = db.query(UserStockState).filter_by(user_id=user_id, symbol=symbol).one_or_none()
     if exists:
         return
-    demo = UNIVERSE.get(symbol, {}).get("last_seen_demo")
-    if demo is None:
+    if settings.market_data_provider == "mock":
+        demo = UNIVERSE.get(symbol, {}).get("last_seen_demo")
+        if demo is None:
+            return
+        db.add(
+            UserStockState(
+                user_id=user_id,
+                symbol=symbol,
+                last_seen_at=datetime.now(UTC) - timedelta(hours=14),
+                last_seen_price=float(demo),
+            )
+        )
+        return
+    quote, _snap = market_service.get_quote(db, symbol)
+    if not quote:
         return
     db.add(
         UserStockState(
             user_id=user_id,
             symbol=symbol,
             last_seen_at=datetime.now(UTC) - timedelta(hours=14),
-            last_seen_price=float(demo),
+            last_seen_price=float(quote.previous_close),
         )
     )
 

@@ -14,7 +14,7 @@ Modular monolith:
 - **Backend:** FastAPI + SQLAlchemy (`backend/`)
 - **PostgreSQL:** users, watchlists, shared `market_snapshots`, `user_stock_state`, `detected_changes`
 - **Redis:** latest quote cache (in-memory fallback if Redis is down)
-- **MarketDataService → MarketDataProvider:** mock by default; Alpha Vantage when `ALPHA_VANTAGE_API_KEY` is set
+- **MarketDataService → MarketDataProvider:** Yahoo Finance via `yfinance` by default (delayed quotes). Mock fallback if Yahoo fails. Alpha Vantage when `MARKET_DATA_PROVIDER=alpha_vantage` and `ALPHA_VANTAGE_API_KEY` is set
 - **Intelligence:** `backend/app/intelligence/` (`significance.py`, `explanation.py`, `last_seen.py`)
 
 Last-seen flow: load previous `user_stock_state` → fetch current snapshot → compare → score → explain → return → then update last seen. First observation never claims a change. Unavailable quotes never overwrite a valid previous price.
@@ -43,7 +43,8 @@ Create DB user/database `marketwatch` / `marketwatch` if not using Compose.
 
 See `.env.example`. Never commit `.env`.
 
-- `MARKET_DATA_PROVIDER=mock` — deterministic terminal quotes (no API key)
+- `MARKET_DATA_PROVIDER=yfinance` — delayed Yahoo Finance quotes (`pip install yfinance`)
+- `MARKET_DATA_PROVIDER=mock` — deterministic terminal quotes (no network)
 - `MARKET_DATA_PROVIDER=alpha_vantage` + `ALPHA_VANTAGE_API_KEY` — delayed live quotes, mock search fallback if the provider misses
 
 ### Run

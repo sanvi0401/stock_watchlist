@@ -64,7 +64,7 @@ def stock_detail(
             result.severity = prior.severity
             result.change_type = prior.change_type
             result.evidence = (prior.evidence or "").split(" | ")
-    spark = UNIVERSE.get(quote.symbol, {}).get("spark") or []
+    spark = quote.sparkline or UNIVERSE.get(quote.symbol, {}).get("spark") or []
     db.commit()
     return QuoteOut(
         symbol=quote.symbol,

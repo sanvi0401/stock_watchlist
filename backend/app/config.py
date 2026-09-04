@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     database_url: str = _default_database_url()
     redis_url: str = "redis://127.0.0.1:6379/0"
     cors_origins: str = "http://127.0.0.1:43123,http://localhost:43123"
-    market_data_provider: str = "mock"
+    market_data_provider: str = "yfinance"
     alpha_vantage_api_key: str = ""
     cache_ttl_seconds: int = 60
     snapshot_refresh_seconds: int = 120
