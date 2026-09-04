@@ -8,7 +8,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.intelligence.last_seen import compare_and_record
 from app.market.service import market_service
-from app.models import Notification, User, UserStockState, Watchlist
+from app.models import Notification, User, UserSettings, UserStockState, Watchlist
 from app.schemas import DashboardOut, QuoteOut
 
 router = APIRouter(tags=["dashboard"])
@@ -47,6 +47,8 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
     first_time = last_state is None and bool(symbols)
 
     market_service.prefetch(db, symbols)
+    prefs = db.scalar(select(UserSettings).where(UserSettings.user_id == user.id))
+    high_only = bool(prefs.high_significance_only) if prefs else False
 
     for symbol in symbols:
         try:
@@ -74,7 +76,13 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
                 )
                 continue
             result = compare_and_record(
-                db, user.id, quote, snap.id if snap else None, commit_last_seen=True
+                db,
+                user.id,
+                quote,
+                snap.id if snap else None,
+                commit_last_seen=True,
+                sensitivity=user.sensitivity,
+                lookback_mode=user.lookback_mode,
             )
             q = QuoteOut(
                 symbol=quote.symbol,
@@ -140,7 +148,11 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
     items.sort(key=lambda x: (SEVERITY_RANK.get(x.severity, 9), -x.significance_score))
     needs = [i for i in items if i.severity == "HIGH" and not i.first_seen]
     meaningful = [i for i in items if i.severity in {"MEANINGFUL", "NOTABLE"} and not i.first_seen]
-    stable = [i for i in items if i.severity == "STABLE" or i.first_seen]
+    if high_only:
+        stable = [i for i in items if i not in needs]
+        meaningful = []
+    else:
+        stable = [i for i in items if i.severity == "STABLE" or i.first_seen]
     statuses = [i.data_status for i in items]
     overall = "LIVE"
     if any(s == "STALE" for s in statuses):

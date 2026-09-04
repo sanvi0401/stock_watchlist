@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError, api, setIdentity, setToken } from '../services/api'
 import { Button, Card, Input, Label } from '../components/ui'
+import { LegalModal } from '../components/LegalModal'
 
 export function LandingPage() {
   return (
@@ -84,7 +85,22 @@ export function LandingPage() {
           <p className="mt-4 text-sm text-[#94A3B8]">This is monitoring, not advice. Delayed data can lag the tape by minutes. Add names by company (“Google”) or ticker (GOOGL) from Discover or a watchlist.</p>
         </Card>
       </section>
+      <footer className="border-t border-[#232F46] px-6 py-8 text-center text-sm text-[#94A3B8]">
+        <LandingLegal />
+      </footer>
     </div>
+  )
+}
+
+function LandingLegal() {
+  const [legal, setLegal] = useState<null | 'terms' | 'privacy'>(null)
+  return (
+    <>
+      <button type="button" className="text-primary underline" onClick={() => setLegal('terms')}>Terms of Service</button>
+      <span className="mx-2">·</span>
+      <button type="button" className="text-primary underline" onClick={() => setLegal('privacy')}>Privacy Policy</button>
+      <LegalModal kind={legal} onClose={() => setLegal(null)} />
+    </>
   )
 }
 
@@ -103,8 +119,14 @@ function AuthFrame({ title, children }: { title: string; children: React.ReactNo
 export function SignUpPage() {
   const nav = useNavigate()
   const [err, setErr] = useState('')
+  const [agreed, setAgreed] = useState(false)
+  const [legal, setLegal] = useState<null | 'terms' | 'privacy'>(null)
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!agreed) {
+      setErr('Open and agree to the Terms of Service and Privacy Policy to continue.')
+      return
+    }
     const fd = new FormData(e.currentTarget)
     try {
       const res = await api.register({
@@ -126,11 +148,21 @@ export function SignUpPage() {
         <div><Label>Full Name</Label><Input name="name" required defaultValue="Sanvi Patel" /></div>
         <div><Label>Work / Investor Email</Label><Input name="email" type="email" required /></div>
         <div><Label>Password</Label><Input name="password" type="password" minLength={8} required /></div>
-        <label className="flex items-center gap-2 text-sm text-[#CBD5E1]"><input type="checkbox" required /> I agree to the Terms of Service and Privacy Policy</label>
+        <label className="flex items-start gap-2 text-sm text-[#CBD5E1]">
+          <input type="checkbox" className="mt-1" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required />
+          <span>
+            I agree to the{' '}
+            <button type="button" className="text-primary underline" onClick={() => setLegal('terms')}>Terms of Service</button>
+            {' '}and{' '}
+            <button type="button" className="text-primary underline" onClick={() => setLegal('privacy')}>Privacy Policy</button>
+            . Open each to read them before creating an account.
+          </span>
+        </label>
         {err ? <p className="text-sm text-loss">{err}</p> : null}
         <Button className="w-full" type="submit">Create Account →</Button>
       </form>
       <p className="mt-4 text-sm">Already have an account? <Link className="text-primary" to="/login">Log In</Link></p>
+      <LegalModal kind={legal} onClose={() => setLegal(null)} />
     </AuthFrame>
   )
 }

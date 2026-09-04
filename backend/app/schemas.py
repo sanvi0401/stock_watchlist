@@ -46,6 +46,7 @@ class UserOut(BaseModel):
     sensitivity: str
     lookback_mode: str
     identity_token: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -155,6 +156,7 @@ class SettingsOut(BaseModel):
     push_alerts: bool
     high_significance_only: bool
     dark_pool_signals: bool
+    created_at: datetime | None = None
 
 
 class SettingsPatch(BaseModel):

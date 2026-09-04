@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
+from app.errors import AppError
 from app.models import Notification, User, UserSettings
 from app.schemas import NotificationOut, SettingsOut, SettingsPatch
 
@@ -23,6 +24,7 @@ def _settings(user: User, prefs: UserSettings | None) -> SettingsOut:
         push_alerts=prefs.push_alerts,
         high_significance_only=prefs.high_significance_only,
         dark_pool_signals=prefs.dark_pool_signals,
+        created_at=user.created_at,
     )
 
 
@@ -41,6 +43,14 @@ def patch_settings(
         prefs = UserSettings(user_id=user.id)
         db.add(prefs)
     data = body.model_dump(exclude_unset=True)
+    if data.get("sensitivity") and data["sensitivity"] not in {"conservative", "balanced", "sensitive"}:
+        raise AppError(400, "invalid_sensitivity", "Choose conservative, balanced, or sensitive.")
+    if data.get("lookback_mode") and data["lookback_mode"] not in {
+        "since_last_check",
+        "previous_close",
+        "five_day",
+    }:
+        raise AppError(400, "invalid_lookback", "Choose a valid lookback window.")
     for key in ("name", "timezone", "currency", "sensitivity", "lookback_mode", "onboarding_complete"):
         if key in data and data[key] is not None:
             setattr(user, key, data[key])

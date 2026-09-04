@@ -32,6 +32,7 @@ def pack_identity(db: Session, user: User) -> str:
         "timezone": user.timezone,
         "currency": user.currency,
         "sensitivity": user.sensitivity,
+        "lookback_mode": user.lookback_mode,
         "lists": [
             {
                 "name": wl.name,
@@ -70,6 +71,14 @@ def restore_user(db: Session, data: dict) -> User:
         if data.get("name"):
             user.name = data["name"]
         user.onboarding_complete = bool(data.get("onboarding_complete", user.onboarding_complete))
+        if data.get("timezone"):
+            user.timezone = str(data["timezone"])
+        if data.get("currency"):
+            user.currency = str(data["currency"])
+        if data.get("sensitivity"):
+            user.sensitivity = str(data["sensitivity"])
+        if data.get("lookback_mode"):
+            user.lookback_mode = str(data["lookback_mode"])
     else:
         user = User(
             name=str(data.get("name") or email.split("@")[0]),
@@ -79,6 +88,7 @@ def restore_user(db: Session, data: dict) -> User:
             timezone=str(data.get("timezone") or "America/New_York"),
             currency=str(data.get("currency") or "USD"),
             sensitivity=str(data.get("sensitivity") or "balanced"),
+            lookback_mode=str(data.get("lookback_mode") or "since_last_check"),
         )
         db.add(user)
         db.flush()

@@ -108,12 +108,15 @@ export function ErrorState({ message }: { message: string }) {
   )
 }
 
-export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) {
+export function Modal({ open, title, children, onClose, wide }: { open: boolean; title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-xl border border-[#2E3E5B] bg-[#1A2234] p-5 shadow-[0_16px_32px_-8px_rgba(0,0,0,0.65)]"
+        className={cn(
+          'w-full rounded-xl border border-[#2E3E5B] bg-[#1A2234] p-5 shadow-[0_16px_32px_-8px_rgba(0,0,0,0.65)]',
+          wide ? 'max-w-2xl' : 'max-w-lg',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">

@@ -8,15 +8,32 @@ WEIGHTS = {
     "user_relevance": 0.10,
 }
 
+# How aggressively we treat a move as an outlier.
+SENSITIVITY_SCALE = {
+    "conservative": 0.82,
+    "balanced": 1.0,
+    "sensitive": 1.2,
+}
+SENSITIVITY_BANDS = {
+    "conservative": (88.0, 70.0, 42.0),
+    "balanced": (80.0, 60.0, 30.0),
+    "sensitive": (70.0, 48.0, 18.0),
+}
 
-def classify(score: float) -> str:
-    if score >= 80:
+
+def classify(score: float, sensitivity: str = "balanced") -> str:
+    high, meaningful, notable = SENSITIVITY_BANDS.get(sensitivity, SENSITIVITY_BANDS["balanced"])
+    if score >= high:
         return "HIGH"
-    if score >= 60:
+    if score >= meaningful:
         return "MEANINGFUL"
-    if score >= 30:
+    if score >= notable:
         return "NOTABLE"
     return "STABLE"
+
+
+def notable_floor(sensitivity: str = "balanced") -> float:
+    return SENSITIVITY_BANDS.get(sensitivity, SENSITIVITY_BANDS["balanced"])[2]
 
 
 def _clamp(value: float, lo: float = 0, hi: float = 100) -> float:
@@ -66,6 +83,7 @@ def significance_score(
     average_volume: float,
     in_primary_watchlist: bool = True,
     prior_attention: bool = False,
+    sensitivity: str = "balanced",
 ) -> dict:
     p = price_abnormality(pct_change, daily_volatility)
     v = volume_anomaly(volume, average_volume)
@@ -79,10 +97,11 @@ def significance_score(
         + WEIGHTS["event_impact"] * ev
         + WEIGHTS["user_relevance"] * rel
     )
-    score = round(_clamp(total), 1)
+    scale = SENSITIVITY_SCALE.get(sensitivity, 1.0)
+    score = round(_clamp(total * scale), 1)
     return {
         "score": score,
-        "severity": classify(score),
+        "severity": classify(score, sensitivity),
         "components": {
             "price_abnormality": round(p, 1),
             "volume_anomaly": round(v, 1),

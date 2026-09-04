@@ -88,7 +88,13 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
                 stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=None))
                 continue
             result = compare_and_record(
-                db, user.id, quote, snap.id if snap else None, commit_last_seen=False
+                db,
+                user.id,
+                quote,
+                snap.id if snap else None,
+                commit_last_seen=False,
+                sensitivity=user.sensitivity,
+                lookback_mode=user.lookback_mode,
             )
             qout = _quote_out(result, quote, quote.company_name)
             stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=qout))
