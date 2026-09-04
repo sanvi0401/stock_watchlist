@@ -46,6 +46,8 @@ html, body, #root {
   color: #d4e4fa;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
+html { scroll-behavior: smooth; }
+section[id] { scroll-margin-top: 5.5rem; }
 body { overscroll-behavior: none; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #273647; border-radius: 8px; }
