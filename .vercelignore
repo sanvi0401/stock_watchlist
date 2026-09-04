@@ -12,6 +12,10 @@ __pycache__
 agent-tools
 agent-tools/**
 .vercel
+.vercel_python_packages
+.vercel_python_packages/**
+_uv
+_uv/**
 .git
 *.pyc
 *.log
