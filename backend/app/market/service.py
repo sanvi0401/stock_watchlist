@@ -164,11 +164,18 @@ class MarketDataService:
             results = self.provider.search(query)
         except Exception:  # noqa: BLE001
             results = []
-        cleaned = []
+        cleaned: list[NormalizedQuote] = []
         for item in results:
             valid = _validate(item)
             if valid:
                 cleaned.append(valid)
+        from app.symbol_names import NAME_TO_SYMBOL
+
+        hint = NAME_TO_SYMBOL.get((query or "").strip().lower())
+        if hint:
+            quoted, _ = self.get_quote(db, hint)
+            if quoted:
+                cleaned = [quoted] + [c for c in cleaned if c.symbol != quoted.symbol]
         return cleaned
 
     def refresh_symbols(self, db: Session, symbols: list[str]) -> None:
