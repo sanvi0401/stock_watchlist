@@ -44,26 +44,6 @@ def _quote_out(result, quote, company: str) -> QuoteOut:
     )
 
 
-def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: bool = False) -> WatchlistOut:
-    stocks = []
-    attention = meaningful = stable = 0
-    if with_quotes:
-        for row in wl.stocks:
-            quote, snap = market_service.get_quote(db, row.symbol)
-            if not quote:
-                stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=None))
-                continue
-            result = compare_and_record(
-                db, user.id, quote, snap.id if snap else None, commit_last_seen=False
-            )
-            qout = _quote_out(result, quote, quote.company_name)
-            stocks.append(WatchlistStockOut(symbol=row.symbol, added_at=row.added_at, quote=qout))
-            if result.severity == "HIGH":
-                attention += 1
-            elif result.severity in {"MEANINGFUL", "NOTABLE"}:
-                meaningful += 1
-            else:
-                stable += 1
 def _seed_baseline(db: Session, user_id: int, symbol: str) -> None:
     exists = db.query(UserStockState).filter_by(user_id=user_id, symbol=symbol).one_or_none()
     if exists:
