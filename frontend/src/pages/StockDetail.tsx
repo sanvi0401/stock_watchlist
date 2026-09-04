@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../services/api'
-import type { Quote } from '../types'
-import { Card, DataBadge, Delta, ErrorState, SeverityPill, Skeleton, fmtCap, fmtPrice } from '../components/ui'
+import type { Quote, Watchlist } from '../types'
+import { Button, Card, DataBadge, Delta, ErrorState, SeverityPill, Skeleton, fmtCap, fmtPrice } from '../components/ui'
 
 export default function StockDetailPage() {
   const { symbol } = useParams()
   const [q, setQ] = useState<Quote | null>(null)
   const [err, setErr] = useState('')
   const [range, setRange] = useState('Since Last Check')
+  const [lists, setLists] = useState<Watchlist[]>([])
+  const [added, setAdded] = useState('')
   useEffect(() => {
     if (!symbol) return
     api.stock(symbol).then(setQ).catch((e) => setErr(e.message || 'Stock not found'))
+    api.watchlists().then(setLists).catch(() => undefined)
   }, [symbol])
   if (err) return <ErrorState message={err} />
   if (!q) return <Skeleton className="h-96" />
@@ -32,7 +35,29 @@ export default function StockDetailPage() {
             <DataBadge status={q.data_status} />
           </div>
         </div>
-        <SeverityPill severity={q.severity} />
+        <div className="flex flex-col items-end gap-2">
+          <SeverityPill severity={q.severity} />
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                let list = lists[0]
+                if (!list) {
+                  list = await api.createWatchlist({ name: 'My Watchlist', symbols: [q.symbol] })
+                  setLists([list])
+                } else {
+                  await api.addStock(list.id, q.symbol)
+                }
+                setAdded(`Added ${q.symbol} to ${list.name}`)
+              } catch (e) {
+                setErr((e as Error).message)
+              }
+            }}
+          >
+            Add to watchlist
+          </Button>
+          {added ? <p className="text-xs text-gain">{added}</p> : null}
+        </div>
       </div>
       <Card>
         <div className="mb-3 flex flex-wrap gap-2">
