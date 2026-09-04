@@ -49,7 +49,13 @@ def stock_detail(
     if not quote:
         raise AppError(404, "stock_not_found", "We couldn't find that symbol.")
     result = compare_and_record(
-        db, user.id, quote, snap.id if snap else None, commit_last_seen=False
+        db,
+        user.id,
+        quote,
+        snap.id if snap else None,
+        commit_last_seen=False,
+        sensitivity=user.sensitivity,
+        lookback_mode=user.lookback_mode,
     )
     if (result.since_last_check_percent == 0 or result.since_last_check_percent is None) and not result.first_seen:
         prior = db.scalar(
