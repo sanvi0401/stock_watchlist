@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-secondary: #4edea3;
+  --color-surface-container-highest: #273647;
+  --color-on-primary: #1000a9;
+  --color-primary-container: #8083ff;
+  --color-surface-bright: #2c3a4c;
+  --color-on-primary-container: #0d0096;
+  --color-error-container: #93000a;
+  --color-on-surface-variant: #c7c4d7;
+  --color-secondary-container: #00a572;
+  --color-surface: #051424;
+  --color-inverse-surface: #d4e4fa;
+  --color-outline: #908fa0;
+  --color-surface-container: #122131;
+  --color-surface-container-low: #0d1c2d;
+  --color-on-background: #d4e4fa;
+  --color-background: #051424;
+  --color-on-surface: #d4e4fa;
+  --color-surface-dim: #051424;
+  --color-outline-variant: #464554;
+  --color-primary: #c0c1ff;
+  --color-tertiary: #ffb95f;
+  --color-surface-container-lowest: #010f1f;
+  --color-tertiary-container: #ca8100;
+  --color-surface-variant: #273647;
+  --color-error: #ffb4ab;
+  --color-surface-container-high: #1c2b3c;
+  --color-gain: #10b981;
+  --color-loss: #f43f5e;
+  --color-intel: #6366f1;
+  --color-warn: #f59e0b;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-sm: 0.125rem;
+  --radius: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  background: #051424;
+  color: #d4e4fa;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+body { overscroll-behavior: none; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #273647; border-radius: 8px; }
