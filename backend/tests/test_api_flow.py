@@ -23,3 +23,13 @@ def test_search_and_history_and_settings():
     assert settings.status_code == 200
     patched = client.patch("/settings", json={"sensitivity": "sensitive"}, headers=h)
     assert patched.json()["sensitivity"] == "sensitive"
+    again = client.get("/settings", headers=h)
+    assert again.json()["sensitivity"] == "sensitive"
+    cards = client.patch(
+        "/settings",
+        json={"sensitivity": "conservative", "lookback_mode": "previous_close", "high_significance_only": True},
+        headers=h,
+    )
+    assert cards.json()["sensitivity"] == "conservative"
+    assert cards.json()["lookback_mode"] == "previous_close"
+    assert cards.json()["high_significance_only"] is True
