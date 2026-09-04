@@ -20,7 +20,8 @@ htmlcov/
 .vscode/
 frontend/dist
 backend/*.db
-*.sqlite3
+dump.rdb
+*.rdb
 agent-tools/
 .cursor/
 .vercel
