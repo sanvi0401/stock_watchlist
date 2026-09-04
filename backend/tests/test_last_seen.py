@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.intelligence.last_seen import compare_and_record
 from app.market.mock import MockMarketDataProvider
@@ -8,7 +9,7 @@ from tests.conftest import TestingSession
 
 
 def _user(db):
-    user = User(name="T", email=f"u{id(db)}@t.com", password_hash=hash_password("password12"))
+    user = User(name="T", email=f"u{uuid4().hex}@t.com", password_hash=hash_password("password12"))
     db.add(user)
     db.commit()
     db.refresh(user)

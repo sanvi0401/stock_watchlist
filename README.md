@@ -58,6 +58,16 @@ cd frontend && npm run dev
 
 Sign up, complete onboarding (default tickers NVDA/AAPL/MSFT/TSLA), then open Overview. Mock names are seeded with a 14-hour-old baseline so the first dashboard visit already shows last-checked deltas.
 
+### Vercel
+
+Frontend (Vite) and backend (FastAPI) deploy together. `vercel.json` builds `frontend/dist` and routes `/api/*` to `api/index.py`.
+
+On Vercel the API uses SQLite in `/tmp` and an in-memory cache unless you set `DATABASE_URL` (Postgres) and `REDIS_URL`. Set `SECRET_KEY` in the project environment before going live.
+
+```bash
+npx vercel --prod
+```
+
 ### Tests
 
 ```bash
