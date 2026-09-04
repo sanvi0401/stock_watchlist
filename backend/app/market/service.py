@@ -125,6 +125,33 @@ class MarketDataService:
             return quote, None
         return None, None
 
+    def _commit_quote(self, db: Session, symbol: str, quote: NormalizedQuote | None):
+        if quote:
+            quote = _validate(quote)
+        if quote and quote.data_status != "UNAVAILABLE":
+            persist_snapshot(db, quote)
+            payload = {**quote.__dict__, "timestamp": quote.timestamp.isoformat()}
+            cache_set(f"quote:{settings.market_data_provider}:{symbol}", payload, ttl=settings.cache_ttl_seconds)
+
+    def prefetch(self, db: Session, symbols: list[str]) -> None:
+        needed: list[str] = []
+        seen: set[str] = set()
+        for raw in symbols:
+            symbol = raw.upper().strip()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            if not cache_get(f"quote:{settings.market_data_provider}:{symbol}"):
+                needed.append(symbol)
+        if not needed:
+            return
+        try:
+            fetched = self.provider.get_quotes(needed)
+        except Exception:  # noqa: BLE001
+            fetched = {s: None for s in needed}
+        for symbol in needed:
+            self._commit_quote(db, symbol, fetched.get(symbol))
+
     def search(self, db: Session, query: str) -> list[NormalizedQuote]:
         try:
             results = self.provider.search(query)
@@ -138,9 +165,8 @@ class MarketDataService:
         return cleaned
 
     def refresh_symbols(self, db: Session, symbols: list[str]) -> None:
-        for symbol in {s.upper() for s in symbols}:
-            self.get_quote(db, symbol)
-            db.commit()
+        self.prefetch(db, list(symbols))
+        db.commit()
 
 
 market_service = MarketDataService()
