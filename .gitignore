@@ -20,10 +20,12 @@ htmlcov/
 .vscode/
 frontend/dist
 backend/*.db
-*.sqlite3
+dump.rdb
+*.rdb
 agent-tools/
 .cursor/
 .vercel
 .vercel_python_packages/
 .vercel
 _uv/
+.vercel_python_packages/
