@@ -1,0 +1,93 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.deps import get_current_user
+from app.errors import AppError
+from app.intelligence.last_seen import compare_and_record
+from app.market.mock import UNIVERSE
+from app.market.service import market_service
+from app.models import DetectedChange, User
+from app.schemas import QuoteOut, SearchResult
+
+router = APIRouter(prefix="/stocks", tags=["stocks"])
+
+
+@router.get("/search", response_model=list[SearchResult])
+def search_stocks(
+    q: str = Query(min_length=1),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    results = market_service.search(db, q)
+    out: list[SearchResult] = []
+    for quote in results:
+        day = 0.0
+        if quote.previous_close:
+            day = (quote.price - quote.previous_close) / quote.previous_close * 100
+        out.append(
+            SearchResult(
+                symbol=quote.symbol,
+                company_name=quote.company_name,
+                current_price=quote.price,
+                price_change_percent=round(day, 2),
+                data_status=quote.data_status,  # type: ignore[arg-type]
+                market_state=quote.market_state,
+            )
+        )
+    return out
+
+
+@router.get("/{symbol}", response_model=QuoteOut)
+def stock_detail(
+    symbol: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    quote, snap = market_service.get_quote(db, symbol)
+    if not quote:
+        raise AppError(404, "stock_not_found", "We couldn't find that symbol.")
+    result = compare_and_record(
+        db, user.id, quote, snap.id if snap else None, commit_last_seen=False
+    )
+    if (result.since_last_check_percent == 0 or result.since_last_check_percent is None) and not result.first_seen:
+        prior = db.scalar(
+            select(DetectedChange)
+            .where(DetectedChange.user_id == user.id, DetectedChange.symbol == quote.symbol)
+            .order_by(DetectedChange.detected_at.desc())
+            .limit(1)
+        )
+        if prior:
+            result.explanation = prior.explanation
+            result.significance_score = prior.significance_score
+            result.severity = prior.severity
+            result.change_type = prior.change_type
+            result.evidence = (prior.evidence or "").split(" | ")
+    spark = UNIVERSE.get(quote.symbol, {}).get("spark") or []
+    db.commit()
+    return QuoteOut(
+        symbol=quote.symbol,
+        company_name=quote.company_name,
+        current_price=result.current_price,
+        previous_close=quote.previous_close,
+        previous_price=result.previous_price,
+        price_change_percent=result.price_change_percent,
+        since_last_check_percent=result.since_last_check_percent,
+        volume=quote.volume,
+        average_volume=quote.average_volume,
+        volatility=quote.volatility,
+        market_cap=quote.market_cap,
+        week_52_high=quote.week_52_high,
+        week_52_low=quote.week_52_low,
+        timestamp=quote.timestamp,
+        source=quote.source,
+        data_status=result.data_status,  # type: ignore[arg-type]
+        market_state=quote.market_state,
+        first_seen=result.first_seen,
+        significance_score=result.significance_score,
+        severity=result.severity,  # type: ignore[arg-type]
+        explanation=result.explanation,
+        change_type=result.change_type,
+        evidence=result.evidence + ([f"Spark n={len(spark)}"] if spark else []),
+    )
