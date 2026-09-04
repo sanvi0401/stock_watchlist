@@ -84,6 +84,19 @@ def test_stale_is_not_live():
     assert quote.data_status == "STALE"
 
 
+def test_double_commit_keeps_since_last_check_delta():
+    db = TestingSession()
+    user = _user(db)
+    quote = MockMarketDataProvider().get_quote("NVDA")
+    db.add(UserStockState(user_id=user.id, symbol="NVDA", last_seen_at=datetime.now(UTC), last_seen_price=100))
+    db.commit()
+    first = compare_and_record(db, user.id, quote, None, commit_last_seen=True)
+    db.commit()
+    second = compare_and_record(db, user.id, quote, None, commit_last_seen=True)
+    assert first.since_last_check_percent and first.since_last_check_percent > 0
+    assert second.since_last_check_percent == first.since_last_check_percent
+
+
 def test_multiple_stocks():
     db = TestingSession()
     user = _user(db)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,11 @@ from app.intelligence.explanation import explain_change
 from app.intelligence.significance import significance_score
 from app.market.types import NormalizedQuote
 from app.models import DetectedChange, UserStockState
+
+# Keep the comparison baseline for a short window so a double dashboard
+# fetch (React Strict Mode) does not zero out "since last check".
+_FROZEN_BASELINE: dict[tuple[int, str], tuple[float, datetime]] = {}
+_FREEZE_FOR = timedelta(seconds=90)
 
 
 @dataclass
@@ -85,7 +90,14 @@ def compare_and_record(
             snapshot_id=snapshot_id,
         )
 
-    previous_price = state.last_seen_price
+    key = (user_id, quote.symbol)
+    frozen = _FROZEN_BASELINE.get(key)
+    if frozen and now - frozen[1] < _FREEZE_FOR:
+        previous_price = frozen[0]
+    else:
+        previous_price = state.last_seen_price
+        if commit_last_seen:
+            _FROZEN_BASELINE[key] = (previous_price, now)
     since_pct = _pct(quote.price, previous_price)
 
     if quote.data_status == "UNAVAILABLE":
