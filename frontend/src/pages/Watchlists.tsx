@@ -10,19 +10,22 @@ export default function WatchlistsPage() {
   const [err, setErr] = useState('')
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
-  const load = () => api.watchlists().then(setRows).catch((e) => setErr(e.message))
-  useEffect(() => { load() }, [])
+  useEffect(() => { api.watchlists().then(setRows).catch((e) => setErr(e.message)) }, [])
 
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    const wl = await api.createWatchlist({
-      name: String(fd.get('name')),
-      category: String(fd.get('category') || 'General'),
-      symbols: String(fd.get('symbols') || '').split(',').map((s) => s.trim()).filter(Boolean),
-    })
-    setOpen(false)
-    nav(`/app/watchlists/${wl.id}`)
+    try {
+      const wl = await api.createWatchlist({
+        name: String(fd.get('name')),
+        category: String(fd.get('category') || 'General'),
+        symbols: String(fd.get('symbols') || '').split(',').map((s) => s.trim()).filter(Boolean),
+      })
+      setOpen(false)
+      nav(`/app/watchlists/${wl.id}`)
+    } catch (ex) {
+      setErr((ex as Error).message)
+    }
   }
 
   if (err) return <ErrorState message={err} />
@@ -30,18 +33,18 @@ export default function WatchlistsPage() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[30px] font-semibold">Watchlist Portfolios</h1>
+        <h1 className="text-[30px] font-semibold">My Watchlists</h1>
         <Button onClick={() => setOpen(true)}>+ Create New Watchlist</Button>
       </div>
       {rows.length === 0 ? (
-        <EmptyState title="No watchlists yet" body="Create a list so last-seen baselines have somewhere to live." action={<Button onClick={() => setOpen(true)}>Create watchlist</Button>} />
+        <EmptyState title="No watchlists yet" body="Create a list. Every name you add gets a baseline so the next visit can show what changed." action={<Button onClick={() => setOpen(true)}>Create watchlist</Button>} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {rows.map((w) => (
             <Card key={w.id}>
               <p className="text-[11px] uppercase tracking-wider text-[#94A3B8]">{w.category}</p>
               <h2 className="text-xl font-semibold">{w.name}</h2>
-              <p className="mt-1 text-sm text-[#94A3B8]">{w.stock_count} names · {w.attention_count} need attention · {w.meaningful_count} meaningful</p>
+              <p className="mt-1 text-sm text-[#94A3B8]">{w.stock_count} names · {w.attention_count} need attention · {w.meaningful_count} meaningful{w.unavailable_count ? ` · ${w.unavailable_count} unavailable` : ''}</p>
               <div className="mt-4 flex gap-2">
                 <Link to={`/app/watchlists/${w.id}`}><Button>Open Watchlist</Button></Link>
               </div>
@@ -49,11 +52,11 @@ export default function WatchlistsPage() {
           ))}
         </div>
       )}
-      <Modal open={open} title="Quick add watchlist" onClose={() => setOpen(false)}>
+      <Modal open={open} title="New watchlist" onClose={() => setOpen(false)}>
         <form className="space-y-3" onSubmit={create}>
-          <div><Label>Portfolio name</Label><Input name="name" required /></div>
-          <div><Label>Category tag</Label><Input name="category" placeholder="Tech" /></div>
-          <div><Label>Initial assets</Label><Input name="symbols" placeholder="NVDA, AAPL" /></div>
+          <div><Label>Name</Label><Input name="name" required /></div>
+          <div><Label>Category</Label><Input name="category" placeholder="Tech" /></div>
+          <div><Label>Symbols or company names (optional)</Label><Input name="symbols" placeholder="NVDA, AAPL" /></div>
           <Button type="submit">Create</Button>
         </form>
       </Modal>

@@ -1,19 +1,39 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
+import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import AppShell from './layouts/AppShell'
 import { ForgotPage, LandingPage, LoginPage, ResetPage, SignUpPage } from './pages/Public'
 import Onboarding from './pages/Onboarding'
 import OverviewPage from './pages/Overview'
 import WatchlistsPage from './pages/Watchlists'
 import WatchlistDetailPage from './pages/WatchlistDetail'
-import StockDetailPage from './pages/StockDetail'
 import DiscoverPage from './pages/Discover'
 import HistoryPage from './pages/History'
-import { ErrorPage, NotFoundPage, NotificationsPage, PreferencesPage, ProfilePage, SettingsPage } from './pages/Account'
+import { NotFoundPage, NotificationsPage, SettingsPage } from './pages/Account'
+import { Skeleton } from './components/ui'
 import { getToken } from './services/api'
+
+// The chart library is only needed on the stock page; keep it out of the main bundle.
+const StockDetailPage = lazy(() => import('./pages/StockDetail'))
 
 function Guard({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
   return children
+}
+
+// Keyed by URL so navigating between symbols/queries remounts with fresh state.
+function StockRoute() {
+  const { symbol } = useParams()
+  return (
+    <Suspense fallback={<Skeleton className="h-96" />}>
+      <StockDetailPage key={symbol} />
+    </Suspense>
+  )
+}
+
+function DiscoverRoute() {
+  const [params] = useSearchParams()
+  const q = params.get('q') || ''
+  return <DiscoverPage key={q} initialQuery={q} />
 }
 
 export default function App() {
@@ -26,17 +46,17 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPage />} />
       <Route path="/onboarding" element={<Guard><Onboarding /></Guard>} />
       <Route path="/app" element={<Guard><AppShell /></Guard>}>
+        <Route index element={<Navigate to="/app/overview" replace />} />
         <Route path="overview" element={<OverviewPage />} />
         <Route path="watchlists" element={<WatchlistsPage />} />
         <Route path="watchlists/:id" element={<WatchlistDetailPage />} />
-        <Route path="stocks/:symbol" element={<StockDetailPage />} />
-        <Route path="discover" element={<DiscoverPage />} />
+        <Route path="stocks/:symbol" element={<StockRoute />} />
+        <Route path="discover" element={<DiscoverRoute />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="preferences" element={<PreferencesPage />} />
+        <Route path="profile" element={<Navigate to="/app/settings" replace />} />
+        <Route path="preferences" element={<Navigate to="/app/settings" replace />} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="error" element={<ErrorPage />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

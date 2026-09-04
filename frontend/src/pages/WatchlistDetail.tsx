@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../services/api'
-import type { Watchlist } from '../types'
-import { Button, Delta, ErrorState, Input, Modal, SeverityPill, Skeleton, fmtPrice } from '../components/ui'
+import type { SearchHit, Watchlist } from '../types'
+import { Button, DataBadge, Delta, ErrorState, Input, Modal, SeverityPill, Skeleton } from '../components/ui'
+import { fmtPrice, fmtRelative } from '../utils/format'
 
 export default function WatchlistDetailPage() {
   const { id } = useParams()
@@ -15,10 +16,10 @@ export default function WatchlistDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false)
   const [why, setWhy] = useState<{ symbol: string; text: string; score: number } | null>(null)
   const [query, setQuery] = useState('')
-  const [hints, setHints] = useState<import('../types').SearchHit[]>([])
+  const [hints, setHints] = useState<SearchHit[]>([])
 
-  const load = () => api.watchlist(Number(id)).then(setWl).catch((e) => setErr(e.message))
-  useEffect(() => { load() }, [id])
+  const load = useCallback(() => api.watchlist(Number(id)).then(setWl).catch((e) => setErr(e.message)), [id])
+  useEffect(() => { void load() }, [load])
   useEffect(() => {
     const t = setTimeout(() => {
       if (!query.trim()) { setHints([]); return }
@@ -59,11 +60,11 @@ export default function WatchlistDetailPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setRenameOpen(true)}>Rename</Button>
           <Button variant="outline" onClick={() => setAddOpen(true)}>Add stock</Button>
-          <Button variant="ghost" onClick={async () => { await api.deleteWatchlist(wl.id); nav('/app/watchlists') }}>Delete</Button>
+          <Button variant="ghost" onClick={async () => { if (window.confirm(`Delete "${wl.name}"? Your baselines for these names are kept.`)) { await api.deleteWatchlist(wl.id); nav('/app/watchlists') } }}>Delete</Button>
         </div>
       </div>
       {wl.stock_count === 0 ? (
-        <p className="mt-8 text-sm text-[#94A3B8]">Empty watchlist — add a company name or ticker to start a last-seen baseline.</p>
+        <p className="mt-8 text-sm text-[#94A3B8]">Empty watchlist. Add a company name or ticker; the price you see becomes its baseline.</p>
       ) : (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -75,7 +76,7 @@ export default function WatchlistDetailPage() {
             <table className="w-full min-w-[900px] text-sm">
               <thead className="text-[11px] uppercase tracking-wider text-[#94A3B8]">
                 <tr>
-                  {['Stock & company', 'Price', 'Since last check', 'Today', 'Significance', 'Status', 'Why it matters', 'Actions'].map((h) => (
+                  {['Stock', 'Price', 'Since last check', 'Today', 'Score', 'Status', 'Feed', 'Why it matters', 'Actions'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
                   ))}
                 </tr>
@@ -83,16 +84,17 @@ export default function WatchlistDetailPage() {
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.symbol} className="border-t border-[#232F46] hover:bg-[#1A2234]">
-                    <td className="px-3 py-3"><Link className="font-mono" to={`/app/stocks/${s.symbol}`}>{s.symbol}</Link></td>
+                    <td className="px-3 py-3"><Link className="font-mono" to={`/app/stocks/${s.symbol}`}>{s.symbol}</Link><p className="text-xs text-[#94A3B8]">{s.quote?.company_name ?? 'no data'}</p></td>
                     <td className="px-3 py-3 font-mono">{s.quote ? fmtPrice(s.quote.current_price) : '—'}</td>
-                    <td className="px-3 py-3"><Delta value={s.quote?.since_last_check_percent} /></td>
+                    <td className="px-3 py-3">{s.quote?.first_seen ? <span className="text-xs text-[#94A3B8]">baseline set</span> : <><Delta value={s.quote?.since_last_check_percent} />{s.quote?.baseline_at ? <p className="text-[11px] text-[#94A3B8]">{fmtRelative(s.quote.baseline_at)}</p> : null}</>}</td>
                     <td className="px-3 py-3"><Delta value={s.quote?.price_change_percent} /></td>
                     <td className="px-3 py-3 font-mono">{s.quote ? `${s.quote.significance_score}` : '—'}</td>
                     <td className="px-3 py-3">{s.quote ? <SeverityPill severity={s.quote.severity} /> : '—'}</td>
+                    <td className="px-3 py-3"><DataBadge status={s.quote?.data_status ?? 'UNAVAILABLE'} /></td>
                     <td className="px-3 py-3 max-w-xs truncate text-[#CBD5E1]">{s.quote?.explanation}</td>
                     <td className="px-3 py-3">
                       <button className="text-primary text-xs" onClick={() => s.quote && setWhy({ symbol: s.symbol, text: s.quote.explanation, score: s.quote.significance_score })}>View Why</button>
-                      <button className="ml-3 text-loss text-xs" onClick={async () => setWl(await api.removeStock(wl.id, s.symbol))}>Remove</button>
+                      <button className="ml-3 text-loss text-xs" onClick={async () => { try { setWl(await api.removeStock(wl.id, s.symbol)) } catch (ex) { setErr((ex as Error).message) } }}>Remove</button>
                     </td>
                   </tr>
                 ))}
@@ -112,10 +114,14 @@ export default function WatchlistDetailPage() {
                     type="button"
                     className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[#1A2234]"
                     onClick={async () => {
-                      setWl(await api.addStock(wl!.id, h.symbol))
-                      setAddOpen(false)
-                      setQuery('')
-                      setHints([])
+                      try {
+                        setWl(await api.addStock(wl!.id, h.symbol))
+                        setAddOpen(false)
+                        setQuery('')
+                        setHints([])
+                      } catch (ex) {
+                        setErr((ex as Error).message)
+                      }
                     }}
                   >
                     <span><span className="font-mono">{h.symbol}</span> · {h.company_name}</span>
@@ -140,10 +146,10 @@ export default function WatchlistDetailPage() {
           <Input name="name" defaultValue={wl.name} /><Button type="submit">Save</Button>
         </form>
       </Modal>
-      <Modal open={!!why} title={`${why?.symbol} quantitative signal`} onClose={() => setWhy(null)}>
+      <Modal open={!!why} title={`${why?.symbol} · why it matters`} onClose={() => setWhy(null)}>
         <p className="font-mono text-2xl">{why?.score}/100</p>
         <p className="mt-3 text-sm text-[#CBD5E1]">{why?.text}</p>
-        <Link to={`/app/stocks/${why?.symbol}`} className="mt-4 inline-block text-sm text-primary">Open full briefing</Link>
+        <Link to={`/app/stocks/${why?.symbol}`} className="mt-4 inline-block text-sm text-primary">Open full briefing →</Link>
       </Modal>
     </div>
   )

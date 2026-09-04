@@ -40,7 +40,7 @@ We use this data only to run the product: authenticate you, remember last-seen b
 Ticker searches and quotes are requested from delayed public market-data endpoints (Yahoo). Those requests include the symbols you look up, not your name.
 
 4. Cookies and storage
-We store a session token and an encrypted identity backup in local storage. Signing out clears the session token; the backup remains so you can sign back in on this browser.
+We store only a session token in your browser's local storage. Signing out clears it.
 
 5. Sharing
 We do not sell your personal data. Hosting providers (for example Vercel) may process requests as infrastructure. We do not send marketing email from this demo because there is no mail server.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiError, api, setIdentity, setToken } from '../services/api'
+import { ApiError, api, setToken } from '../services/api'
 import { Button, Card, Input, Label } from '../components/ui'
 import { LegalModal } from '../components/LegalModal'
 
@@ -22,9 +22,6 @@ export function LandingPage() {
           <Link to="/signup"><Button>Get Started</Button></Link>
         </div>
       </header>
-      <div className="border-y border-[#232F46] bg-[#0B0F17] px-6 py-2 font-mono text-xs text-on-surface-variant">
-        SPY 518.32 <span className="text-gain">+0.42%</span> · QQQ 446.12 <span className="text-gain">+0.81%</span> · NVDA 126.88 <span className="text-gain">+5.82%</span> · TSLA 174.60 <span className="text-loss">-5.21%</span>
-      </div>
       <section className="mx-auto max-w-3xl px-6 py-20 text-center">
         <h1 className="text-4xl font-semibold tracking-tight md:text-[40px] md:leading-[48px]">Know what changed. Know what matters.</h1>
         <p className="mt-4 text-on-surface-variant">
@@ -32,7 +29,7 @@ export function LandingPage() {
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link to="/signup"><Button>Get Started</Button></Link>
-          <Link to="/login"><Button variant="outline">Explore Terminal View</Button></Link>
+          <Link to="/login"><Button variant="outline">Log in</Button></Link>
         </div>
       </section>
       <section id="features" className="mx-auto grid max-w-6xl gap-4 px-6 pb-16 md:grid-cols-3">
@@ -54,11 +51,11 @@ export function LandingPage() {
           <div className="mt-4 grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="font-semibold text-primary">Last-seen state</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">When you open Overview we compare today to the last price you personally checked — not yesterday’s close, and not a random refresh. First visit records a baseline and never claims a fake “move.”</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">When you open Overview we compare today to the price you saw on your previous visit — not yesterday’s close. Refreshing within a visit keeps the same baseline. The first visit records a baseline and never claims a fake “move.”</p>
             </div>
             <div>
               <h3 className="font-semibold text-primary">Significance 0–100</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">STABLE 0–29 · NOTABLE 30–59 · MEANINGFUL 60–79 · HIGH 80–100. The score uses that name’s own volatility and volume so noisy names do not constantly scream.</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">STABLE 0–29 · NOTABLE 30–59 · MEANINGFUL 60–79 · HIGH 80–100. The move is measured in units of that name’s own typical daily range, so noisy names do not constantly scream. Volume can back up a move but never invent one.</p>
             </div>
             <div>
               <h3 className="font-semibold text-primary">Why this matters</h3>
@@ -80,7 +77,7 @@ export function LandingPage() {
             <li>Fetch a delayed Yahoo quote (price, previous close, volume, 52-week range, short sparkline).</li>
             <li>Compute percent change since you last looked, and today’s percent vs previous close.</li>
             <li>Score the move against that symbol’s recent volatility and whether volume is unusual.</li>
-            <li>Write a short explanation, rank HIGH → MEANINGFUL → NOTABLE → STABLE, then update last-seen for next time.</li>
+            <li>Write a short explanation, rank HIGH → MEANINGFUL → NOTABLE → STABLE, then record this visit so the next one compares against it.</li>
           </ol>
           <p className="mt-4 text-sm text-[#94A3B8]">This is monitoring, not advice. Delayed data can lag the tape by minutes. Add names by company (“Google”) or ticker (GOOGL) from Discover or a watchlist.</p>
         </Card>
@@ -108,7 +105,7 @@ function AuthFrame({ title, children }: { title: string; children: React.ReactNo
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10">
       <Card className="w-full max-w-md p-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Market Watch Terminal</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Smart Market Watch</p>
         <h1 className="mt-2 text-2xl font-semibold">{title}</h1>
         {children}
       </Card>
@@ -135,7 +132,6 @@ export function SignUpPage() {
         password: String(fd.get('password')),
       })
       setToken(res.access_token)
-      if (res.identity_token) setIdentity(res.identity_token)
       nav('/onboarding')
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : 'Could not create account')
@@ -143,11 +139,11 @@ export function SignUpPage() {
   }
   return (
     <AuthFrame title="Create your Market Watch account">
-      <p className="mt-1 text-sm text-[#94A3B8]">Set up intelligent watchlist monitoring in under 2 minutes.</p>
+      <p className="mt-1 text-sm text-[#94A3B8]">Takes about a minute. No email verification in this demo.</p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-        <div><Label>Full Name</Label><Input name="name" required defaultValue="Sanvi Patel" /></div>
-        <div><Label>Work / Investor Email</Label><Input name="email" type="email" required /></div>
-        <div><Label>Password</Label><Input name="password" type="password" minLength={8} required /></div>
+        <div><Label>Full Name</Label><Input name="name" required autoComplete="name" /></div>
+        <div><Label>Email</Label><Input name="email" type="email" required autoComplete="email" /></div>
+        <div><Label>Password</Label><Input name="password" type="password" minLength={8} maxLength={72} required autoComplete="new-password" /></div>
         <label className="flex items-start gap-2 text-sm text-[#CBD5E1]">
           <input type="checkbox" className="mt-1" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required />
           <span>
@@ -177,7 +173,6 @@ export function LoginPage() {
     try {
       const res = await api.login({ email: String(fd.get('email')), password: String(fd.get('password')) })
       setToken(res.access_token)
-      if (res.identity_token) setIdentity(res.identity_token)
       nav(res.onboarding_complete ? '/app/overview' : '/onboarding')
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : 'Sign in failed')
@@ -217,7 +212,7 @@ export function ForgotPage() {
   return (
     <AuthFrame title="Reset your password">
       <p className="mt-2 text-sm text-[#94A3B8]">
-        We cannot send email from this demo. If the address matches an account on this device, you will get a one-time reset link here.
+        This demo has no email service. Outside production the one-time reset link is shown here instead.
       </p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
         <div><Label>Email</Label><Input name="email" type="email" required /></div>

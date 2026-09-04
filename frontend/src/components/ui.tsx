@@ -1,11 +1,6 @@
 import type { ReactNode } from 'react'
 import type { DataStatus, Severity } from '../types'
-export { fmtCap, fmtPrice } from '../utils/format'
-
-
-export function cn(...parts: Array<string | false | undefined>) {
-  return parts.filter(Boolean).join(' ')
-}
+import { cn } from '../utils/cn'
 
 export function Button({
   children,
