@@ -43,7 +43,7 @@ class AlphaVantageProvider:
                 timestamp=datetime.now(UTC),
                 source=self.source,
                 data_status="DELAYED",
-                market_state="OPEN",
+                market_state="UNKNOWN",
             )
         except Exception:  # noqa: BLE001
             return None

@@ -1,4 +1,7 @@
+import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,9 +11,26 @@ from app.config import settings
 from app.db import Base, engine
 from app.errors import unhandled_exception_handler
 from app.routers import auth, changes, dashboard, settings as settings_router, stocks, watchlists
-from app.worker import start_scheduler
+from app.schemas import HealthOut
+from app.worker import start_scheduler, stop_scheduler
 
-app = FastAPI(title=settings.app_name, version="1.0.0")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    if settings.is_production and settings.secret_key == "dev-change-me-in-production":
+        raise RuntimeError("SECRET_KEY must be set in production.")
+    if settings.persistence_mode == "ephemeral":
+        logger.warning("Persistence is EPHEMERAL (SQLite in /tmp). Set DATABASE_URL for durable storage.")
+    if not os.getenv("VERCEL"):
+        start_scheduler(settings.snapshot_refresh_seconds)
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(title=settings.app_name, version="2.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -30,19 +50,20 @@ async def http_exc(_request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"code": "error", "message": str(detail)})
 
 
-@app.on_event("startup")
-def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    if not os.getenv("VERCEL"):
-        start_scheduler(settings.snapshot_refresh_seconds)
+@app.get("/health", response_model=HealthOut)
+def health() -> HealthOut:
+    from app.cache import get_redis
+    from app.market.freshness import market_state
+    from app.market.service import market_service
 
-
-@app.get("/health")
-def health() -> dict:
-    from app.cache import get_redis, redis_available
-
-    redis_ok = bool(get_redis()) or not redis_available
-    return {"ok": True, "redis": "up" if get_redis() else "fallback", "cache_ok": redis_ok}
+    return HealthOut(
+        environment=settings.environment,
+        provider=market_service.provider_name,
+        cache="redis" if get_redis() else "memory",
+        persistence=settings.persistence_mode,
+        market_state=market_state(),
+        server_time=datetime.now(UTC),
+    )
 
 
 app.include_router(auth.router)

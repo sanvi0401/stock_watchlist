@@ -10,27 +10,19 @@ ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password[:72])
+    return pwd_context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password[:72], password_hash)
+    try:
+        return pwd_context.verify(password, password_hash)
+    except ValueError:
+        return False
 
 
-def create_access_token(subject: str, email: str | None = None) -> str:
+def create_access_token(subject: str) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload: dict = {"sub": subject, "exp": expire}
-    if email:
-        payload["email"] = email.lower()
-    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
-
-
-def decode_token(token: str) -> str | None:
-    payload = decode_token_payload(token)
-    if not payload:
-        return None
-    sub = payload.get("sub")
-    return str(sub) if sub is not None else None
+    return jwt.encode({"sub": subject, "exp": expire}, settings.secret_key, algorithm=ALGORITHM)
 
 
 def decode_token_payload(token: str) -> dict | None:

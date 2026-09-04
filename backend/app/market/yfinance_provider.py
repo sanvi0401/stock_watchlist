@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pandas as pd
 import yfinance as yf
 
+from app.market.freshness import session_timestamp
 from app.market.mock import MockMarketDataProvider, UNIVERSE
 from app.market.types import NormalizedQuote
 
@@ -54,11 +55,7 @@ class YFinanceProvider:
         try:
             idx = last.name
             if getattr(idx, "to_pydatetime", None):
-                ts = idx.to_pydatetime()
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=UTC)
-                else:
-                    ts = ts.astimezone(UTC)
+                ts = session_timestamp(idx.to_pydatetime())
         except Exception:  # noqa: BLE001
             ts = datetime.now(UTC)
 
@@ -76,7 +73,7 @@ class YFinanceProvider:
             timestamp=ts,
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state="UNKNOWN",
             sparkline=spark,
         )
 
@@ -171,7 +168,7 @@ class YFinanceProvider:
             timestamp=datetime.now(UTC),
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state="UNKNOWN",
             sparkline=[],
         )
 

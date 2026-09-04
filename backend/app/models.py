@@ -24,11 +24,11 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    timezone: Mapped[str] = mapped_column(String(64), default="America/New_York")
-    currency: Mapped[str] = mapped_column(String(8), default="USD")
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
     onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     sensitivity: Mapped[str] = mapped_column(String(16), default="balanced")
     lookback_mode: Mapped[str] = mapped_column(String(32), default="since_last_check")
+    high_significance_only: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -51,7 +51,7 @@ class Watchlist(Base):
 
     user: Mapped[User] = relationship(back_populates="watchlists")
     stocks: Mapped[list["WatchlistStock"]] = relationship(
-        back_populates="watchlist", cascade="all, delete-orphan"
+        back_populates="watchlist", cascade="all, delete-orphan", order_by="WatchlistStock.added_at"
     )
 
 
@@ -71,6 +71,8 @@ class WatchlistStock(Base):
 
 
 class MarketSnapshot(Base):
+    """Shared across users: one row per (symbol, provider print). Fallback when the provider is down."""
+
     __tablename__ = "market_snapshots"
     __table_args__ = (Index("ix_snapshots_symbol_ts", "symbol", "timestamp"),)
 
@@ -85,19 +87,31 @@ class MarketSnapshot(Base):
     market_cap: Mapped[float] = mapped_column(Float, default=0)
     week_52_high: Mapped[float] = mapped_column(Float, default=0)
     week_52_low: Mapped[float] = mapped_column(Float, default=0)
+    sparkline: Mapped[str] = mapped_column(Text, default="")
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     source: Mapped[str] = mapped_column(String(64), default="mock")
-    data_status: Mapped[str] = mapped_column(String(16), default="LIVE")
-    market_state: Mapped[str] = mapped_column(String(16), default="OPEN")
+    provider_status: Mapped[str] = mapped_column(String(16), default="DELAYED")
 
 
 class UserStockState(Base):
+    """Per-user memory of a symbol.
+
+    baseline_*  : the price the user is being compared against ("since you last checked")
+    last_seen_* : the most recent time the user viewed the symbol
+
+    Within one visit (check_session_minutes) only last_seen moves. When a new
+    visit starts, baseline is rolled to the previous last_seen value.
+    """
+
     __tablename__ = "user_stock_state"
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_symbol_state"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    baseline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    baseline_price: Mapped[float] = mapped_column(Float, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_price: Mapped[float] = mapped_column(Float, nullable=False)
     reference_snapshot_id: Mapped[int | None] = mapped_column(
@@ -115,6 +129,9 @@ class DetectedChange(Base):
     change_type: Mapped[str] = mapped_column(String(64), nullable=False)
     significance_score: Mapped[float] = mapped_column(Float, nullable=False)
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    baseline_price: Mapped[float] = mapped_column(Float, default=0)
+    current_price: Mapped[float] = mapped_column(Float, default=0)
+    since_last_check_percent: Mapped[float] = mapped_column(Float, default=0)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[str] = mapped_column(Text, default="")
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -144,14 +161,3 @@ class Notification(Base):
     kind: Mapped[str] = mapped_column(String(32), default="change")
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class UserSettings(Base):
-    __tablename__ = "user_settings"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
-    email_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
-    push_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
-    high_significance_only: Mapped[bool] = mapped_column(Boolean, default=False)
-    dark_pool_signals: Mapped[bool] = mapped_column(Boolean, default=True)

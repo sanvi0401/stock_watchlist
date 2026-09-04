@@ -63,7 +63,7 @@ UNIVERSE: dict[str, dict] = {
         "average_volume": 21_000_000,
         "volatility": 0.018,
         "market_cap": 2.2e12,
-        "week_52_high": 207.05 if False else 312.0,
+        "week_52_high": 312.0,
         "week_52_low": 140.53,
         "last_seen_demo": 283.20,
         "spark": [280, 281, 282, 283, 283.5, 284, 284.05, 284.10],
@@ -189,7 +189,7 @@ class MockMarketDataProvider:
             timestamp=now,
             source=self.source,
             data_status=status,
-            market_state="OPEN" if status != "UNAVAILABLE" else "UNKNOWN",
+            market_state="UNKNOWN",
             sparkline=list(row.get("spark") or []),
         )
 

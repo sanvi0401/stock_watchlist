@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import httpx
 
+from app.market.freshness import session_timestamp
 from app.market.mock import MockMarketDataProvider, UNIVERSE
 from app.market.types import NormalizedQuote
 
@@ -84,7 +85,7 @@ class YahooHttpProvider:
         try:
             stamps = result.get("timestamp") or []
             if stamps:
-                ts = datetime.fromtimestamp(int(stamps[-1]), tz=UTC)
+                ts = session_timestamp(datetime.fromtimestamp(int(stamps[-1]), tz=UTC))
         except (TypeError, ValueError, OSError):
             ts = datetime.now(UTC)
 
@@ -102,7 +103,7 @@ class YahooHttpProvider:
             timestamp=ts,
             source=self.source,
             data_status="DELAYED",
-            market_state="OPEN",
+            market_state="UNKNOWN",
             sparkline=spark,
         )
 

@@ -3,9 +3,9 @@ import os
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("MARKET_DATA_PROVIDER", "mock")
-os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/15")
+os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:1/15")  # unreachable on purpose: exercise the memory cache
 
-from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,10 +15,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import MarketSnapshot, User, UserStockState
-from app.security import hash_password
-
-from sqlalchemy import event
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -32,6 +28,8 @@ def _fk(dbapi_conn, _connection_record):  # noqa: ANN001
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+
+
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base.metadata.create_all(bind=engine)
 
@@ -55,12 +53,10 @@ def db():
     session.close()
 
 
-def auth_headers():
-    r = client.post(
-        "/auth/register",
-        json={"name": "Sanvi Patel", "email": "sanvi@test.com", "password": "password12"},
-    )
+def auth_headers(email: str | None = None) -> dict[str, str]:
+    """Fresh user per call unless an email is given."""
+    email = email or f"user-{uuid4().hex[:10]}@test.com"
+    r = client.post("/auth/register", json={"name": "Test User", "email": email, "password": "password12"})
     if r.status_code == 409:
-        r = client.post("/auth/login", json={"email": "sanvi@test.com", "password": "password12"})
-    token = r.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+        r = client.post("/auth/login", json={"email": email, "password": "password12"})
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
