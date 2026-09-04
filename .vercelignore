@@ -6,6 +6,12 @@ node_modules
 frontend/node_modules
 __pycache__
 .pytest_cache
+**/.pytest_cache
+**/.pytest_cache/**
 .cursor
 agent-tools
+agent-tools/**
+.vercel
+.git
 *.pyc
+*.log
