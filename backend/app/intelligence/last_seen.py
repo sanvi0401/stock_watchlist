@@ -93,7 +93,7 @@ def compare_and_record(
             quote.symbol, since_pct, volume_ratio, quote.volatility, "STABLE", False, "UNAVAILABLE"
         )
         return ChangeResult(
-            symbol=quote.price and previous_price,
+            symbol=quote.symbol,
             current_price=previous_price,
             previous_price=previous_price,
             price_change_percent=round(day_pct, 2),
