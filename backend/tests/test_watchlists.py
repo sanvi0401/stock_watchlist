@@ -21,3 +21,20 @@ def test_watchlist_crud_and_duplicate_stock():
     assert renamed.json()["name"] == "Core Tech"
     gone = client.delete(f"/watchlists/{wid}", headers=h)
     assert gone.status_code == 204
+
+
+def test_add_stock_by_company_name():
+    h = auth_headers()
+    created = client.post("/watchlists", json={"name": "Names", "symbols": ["NVDA"]}, headers=h)
+    wid = created.json()["id"]
+    added = client.post(f"/watchlists/{wid}/stocks", json={"symbol": "google"}, headers=h)
+    assert added.status_code == 200
+    symbols = [s["symbol"] for s in added.json()["stocks"]]
+    assert "GOOGL" in symbols
+
+
+def test_search_resolves_company_name():
+    h = auth_headers()
+    found = client.get("/stocks/search", params={"q": "google"}, headers=h)
+    assert found.status_code == 200
+    assert any(hit["symbol"] == "GOOGL" for hit in found.json())
