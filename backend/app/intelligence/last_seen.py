@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.intelligence.explanation import explain_change
-from app.intelligence.significance import significance_score
+from app.intelligence.significance import notable_floor, significance_score
 from app.market.types import NormalizedQuote
 from app.models import DetectedChange, UserStockState
 
@@ -48,6 +48,8 @@ def compare_and_record(
     *,
     commit_last_seen: bool = True,
     in_primary_watchlist: bool = True,
+    sensitivity: str = "balanced",
+    lookback_mode: str = "since_last_check",
 ) -> ChangeResult:
     now = datetime.now(UTC)
     state = (
@@ -98,6 +100,10 @@ def compare_and_record(
         previous_price = state.last_seen_price
         if commit_last_seen:
             _FROZEN_BASELINE[key] = (previous_price, now)
+    if lookback_mode == "previous_close":
+        previous_price = quote.previous_close
+    elif lookback_mode == "five_day" and quote.sparkline:
+        previous_price = float(quote.sparkline[0]) or previous_price
     since_pct = _pct(quote.price, previous_price)
 
     if quote.data_status == "UNAVAILABLE":
@@ -127,6 +133,7 @@ def compare_and_record(
         quote.volume,
         quote.average_volume,
         in_primary_watchlist=in_primary_watchlist,
+        sensitivity=sensitivity,
     )
     change_type, explanation, evidence = explain_change(
         quote.symbol,
@@ -138,7 +145,7 @@ def compare_and_record(
         quote.data_status,
     )
 
-    if scored["score"] >= 30:
+    if scored["score"] >= notable_floor(sensitivity):
         db.add(
             DetectedChange(
                 user_id=user_id,
