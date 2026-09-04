@@ -79,6 +79,7 @@ def serialize_watchlist(db: Session, user: User, wl: Watchlist, with_quotes: boo
     stocks = []
     attention = meaningful = stable = 0
     if with_quotes:
+        market_service.prefetch(db, [row.symbol for row in wl.stocks])
         for row in wl.stocks:
             quote, snap = market_service.get_quote(db, row.symbol)
             if not quote:

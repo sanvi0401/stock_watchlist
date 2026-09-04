@@ -23,14 +23,6 @@ def _hist():
 def test_yfinance_quote_from_history():
     ticker = MagicMock()
     ticker.history.return_value = _hist()
-    ticker.fast_info = MagicMock(
-        last_price=110.0,
-        previous_close=106.0,
-        market_cap=1e12,
-        year_high=120.0,
-        year_low=80.0,
-        last_volume=2_000_000,
-    )
     with patch("app.market.yfinance_provider.yf.Ticker", return_value=ticker):
         quote = YFinanceProvider().get_quote("NVDA")
     assert quote is not None
@@ -39,6 +31,33 @@ def test_yfinance_quote_from_history():
     assert quote.price == 110.0
     assert quote.previous_close == 106.0
     assert quote.company_name == "NVIDIA Corporation"
+    ticker.history.assert_called_once()
+
+
+def test_yfinance_batch_quotes():
+    hist = _hist()
+    with patch("app.market.yfinance_provider.yf.download", return_value=hist):
+        quotes = YFinanceProvider().get_quotes(["NVDA"])
+    assert quotes["NVDA"] is not None
+    assert quotes["NVDA"].price == 110.0
+    assert quotes["NVDA"].source == "yfinance"
+
+
+def test_yfinance_search_uses_yahoo_fields_without_history():
+    row = {
+        "symbol": "MSFT",
+        "shortname": "Microsoft Corporation",
+        "quoteType": "EQUITY",
+        "regularMarketPrice": 420.5,
+        "regularMarketPreviousClose": 418.0,
+        "regularMarketVolume": 12_000_000,
+    }
+    with patch("app.market.yfinance_provider.yf.Search") as search:
+        search.return_value.quotes = [row]
+        results = YFinanceProvider().search("microsoft")
+    assert results[0].symbol == "MSFT"
+    assert results[0].price == 420.5
+    assert results[0].source == "yfinance"
 
 
 def test_yfinance_falls_back_to_mock_on_failure():

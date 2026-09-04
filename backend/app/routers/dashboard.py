@@ -46,6 +46,8 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
     unavailable: list[QuoteOut] = []
     first_time = last_state is None and bool(symbols)
 
+    market_service.prefetch(db, symbols)
+
     for symbol in symbols:
         try:
             quote, snap = market_service.get_quote(db, symbol)
