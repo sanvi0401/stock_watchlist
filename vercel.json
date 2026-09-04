@@ -9,7 +9,8 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "backend/**"
+      "includeFiles": "backend/app/**",
+      "excludeFiles": "{agent-tools/**,.vercel/**,dump.rdb,frontend/node_modules/**}"
     }
   }
 }

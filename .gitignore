@@ -23,3 +23,6 @@ backend/*.db
 *.sqlite3
 agent-tools/
 .cursor/
+.vercel
+.vercel_python_packages/
+.vercel
