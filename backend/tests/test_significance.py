@@ -18,3 +18,13 @@ def test_classify_bands():
     assert classify(40) == "NOTABLE"
     assert classify(70) == "MEANINGFUL"
     assert classify(90) == "HIGH"
+
+
+def test_sensitivity_changes_outlier_band():
+    move = significance_score(3.2, 0.018, 50_000_000, 40_000_000, sensitivity="balanced")
+    quiet = significance_score(3.2, 0.018, 50_000_000, 40_000_000, sensitivity="conservative")
+    loud = significance_score(3.2, 0.018, 50_000_000, 40_000_000, sensitivity="sensitive")
+    assert quiet["score"] < move["score"] < loud["score"]
+    assert classify(72, "balanced") == "MEANINGFUL"
+    assert classify(72, "sensitive") == "HIGH"
+    assert classify(72, "conservative") == "MEANINGFUL"
