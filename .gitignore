@@ -26,3 +26,4 @@ agent-tools/
 .vercel
 .vercel_python_packages/
 .vercel
+_uv/
