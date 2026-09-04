@@ -7,6 +7,7 @@ from app.cache import cache_get, cache_set
 from app.config import settings
 from app.market.alpha_vantage import AlphaVantageProvider
 from app.market.mock import MockMarketDataProvider
+from app.market.yfinance_provider import YFinanceProvider
 from app.market.types import NormalizedQuote
 from app.models import MarketSnapshot
 
@@ -14,9 +15,12 @@ VALID_STATUSES = {"LIVE", "DELAYED", "STALE", "UNAVAILABLE"}
 
 
 def _provider():
-    if settings.market_data_provider == "alpha_vantage" and settings.alpha_vantage_api_key:
+    name = (settings.market_data_provider or "yfinance").lower()
+    if name == "alpha_vantage" and settings.alpha_vantage_api_key:
         return AlphaVantageProvider()
-    return MockMarketDataProvider()
+    if name == "mock":
+        return MockMarketDataProvider()
+    return YFinanceProvider()
 
 
 def _validate(quote: NormalizedQuote) -> NormalizedQuote | None:
@@ -88,7 +92,8 @@ class MarketDataService:
 
     def get_quote(self, db: Session, symbol: str) -> tuple[NormalizedQuote | None, MarketSnapshot | None]:
         symbol = symbol.upper().strip()
-        cached = cache_get(f"quote:{symbol}")
+        cache_key = f"quote:{settings.market_data_provider}:{symbol}"
+        cached = cache_get(cache_key)
         if cached:
             ts = cached.get("timestamp")
             if isinstance(ts, str):
@@ -109,7 +114,7 @@ class MarketDataService:
         if quote and quote.data_status != "UNAVAILABLE":
             snap = persist_snapshot(db, quote)
             payload = {**quote.__dict__, "timestamp": quote.timestamp.isoformat()}
-            cache_set(f"quote:{symbol}", payload, ttl=settings.cache_ttl_seconds)
+            cache_set(cache_key, payload, ttl=settings.cache_ttl_seconds)
             return quote, snap
 
         existing = latest_db_snapshot(db, symbol)
