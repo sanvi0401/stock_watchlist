@@ -43,7 +43,7 @@ Ticker searches and quotes are requested from delayed public market-data endpoin
 We store a session token in local storage. Signing out clears it. Password hashes never leave the server.
 
 5. Sharing
-We do not sell your personal data. Hosting providers (for example Vercel) may process requests as infrastructure. Password-reset email is sent only if the operator configured SMTP.
+We do not sell your personal data. Hosting providers (for example Vercel) may process requests as infrastructure. Password-reset email is sent only when the operator has configured the production email provider.
 
 6. Retention
 You can stop using the product at any time. Without a persistent DATABASE_URL, a local SQLite file is development-only and is not a production store.

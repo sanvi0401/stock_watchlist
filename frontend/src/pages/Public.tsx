@@ -209,7 +209,7 @@ export function ForgotPage() {
   return (
     <AuthFrame title="Reset your password">
       <p className="mt-2 text-sm text-[#94A3B8]">
-        We never confirm whether an email exists. If SMTP is configured, a single-use link is emailed. Production responses never include a reset token.
+        We never confirm whether an email exists. If password-reset email is configured, a single-use link is emailed. Production responses never include a reset token.
       </p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
         <div><Label>Email</Label><Input name="email" type="email" required /></div>

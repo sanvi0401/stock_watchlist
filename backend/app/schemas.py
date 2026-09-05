@@ -146,7 +146,12 @@ class HistoryItem(BaseModel):
     change_type: str
     significance_score: float
     severity: Severity
+    baseline_price: float
+    current_price: float
+    currency: str
+    since_last_check_percent: float
     explanation: str
+    evidence: list[str] = []
     snapshot_id: int | None = None
 
 

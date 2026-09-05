@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    resend_api_key: str = ""
+    email_from: str = ""
     live_max_age_seconds: int = 5 * 60
     delayed_max_age_seconds: int = 20 * 60
     stale_max_age_seconds: int = 24 * 60 * 60
@@ -123,6 +125,12 @@ def validate_settings(cfg: "Settings | None" = None) -> None:
         print(
             "FATAL: production requires a persistent DATABASE_URL "
             "(Postgres). Ephemeral SQLite is not allowed.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if not cfg.resend_api_key or not cfg.email_from:
+        print(
+            "FATAL: production requires RESEND_API_KEY and EMAIL_FROM for password reset email.",
             file=sys.stderr,
         )
         raise SystemExit(2)
