@@ -1,103 +1,534 @@
 # Smart Market Watch
 
-This is not a generic stock ticker. The product answers:
+> A production-ready stock watchlist and market-change intelligence dashboard built to answer one practical question: **what meaningfully changed since I last acknowledged a check?**
 
-**What meaningfully changed since I last acknowledged a check, scored against each name’s own recent behavior?**
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?logo=vercel)](https://stockmarketwatchlist-sanvi0401s-projects.vercel.app)
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-61DAFB?logo=react)](https://react.dev/)
+[![Database](https://img.shields.io/badge/Database-Neon%20PostgreSQL-00E599?logo=postgresql)](https://neon.tech/)
 
-Shared market snapshots are compared to a per-user **acknowledged** baseline. A GET does not quietly redefine “last checked.” Volatility-normalized significance, explicit LIVE / DELAYED / STALE / UNAVAILABLE labels, and “first observation = baseline, not a fake move” are the core.
+## Live Application
 
-## Architecture
+**Production:** https://stockmarketwatchlist-sanvi0401s-projects.vercel.app
 
-```
-Provider (Yahoo delayed, or mock when explicitly configured)
-    → validate + age-based status
-    → shared snapshot cache + persisted market_snapshots
-    → dashboard compares vs user_stock_state (acknowledged last-seen)
-    → POST /dashboard/acknowledge advances the baseline
-```
+The application is deployed on Vercel with a FastAPI API, React/Vite frontend, and PostgreSQL persistence through Neon.
 
-- **Frontend:** React + TypeScript + Vite + Tailwind (`frontend/`)
-- **Backend:** FastAPI + SQLAlchemy (`backend/`)
-- **Database:** PostgreSQL in production (`DATABASE_URL`). SQLite is **local development / tests only**.
-- **Redis:** optional quote cache; in-memory fallback **with TTL**.
-- **Quotes:** delayed Yahoo. Local default `MARKET_DATA_PROVIDER=yfinance`. On Vercel (`VERCEL=1`) Yahoo HTTP (`yahoo_http.py`) so the function stays small. `mock` only when that provider is set on purpose. Provider failure never invents a LIVE print: last valid snapshot is returned as DELAYED/STALE by age, otherwise UNAVAILABLE.
+---
 
-## What “last checked” means
+## Overview
 
-`user_stock_state` is the last **acknowledged** snapshot, not the last HTTP GET.
+Smart Market Watch is a full-stack stock monitoring application designed around **acknowledged user baselines**, rather than treating every page refresh as a new observation.
 
-1. `GET /dashboard` loads that baseline, fetches current shared quotes, scores the delta, and may record an idempotent `DetectedChange` / in-app notification (same fingerprint → no duplicate). It does **not** update last-seen.
-2. `POST /dashboard/acknowledge` writes current prices into `user_stock_state`.
-3. Opening a stock page or watchlist calculates the same comparison and does **not** write change history.
+The system combines:
 
-First observation (no baseline): we show the quote and say so. We do not claim a since-last-check move.
+- Personal stock watchlists
+- Shared market-price snapshots
+- User-specific acknowledged baselines
+- Volatility-normalized change significance
+- LIVE / DELAYED / STALE / UNAVAILABLE market-data states
+- Explainable change detection
+- In-app change history
+- Dashboard notifications
+- Secure authentication
+- Google Authenticator / TOTP account protection and password recovery
+- Production PostgreSQL persistence
+- Request-driven refreshes suitable for serverless deployment
 
-## Significance (explainable, not “AI”)
+The goal is to surface **meaningful changes without manufacturing signals from ordinary page refreshes**.
 
-Score 0–100 from:
+---
 
-- **Volatility-standardized move** — `|return| / recent daily-return stdev` (not a mean-adjusted z-score)
-- **Volume vs typical**, scaled by how far through the US regular session we are (conservative when the session has barely started; we do not have true volume-by-time-of-day)
-- **Short vs longer realized vol** (about 5 sessions vs up to 30) when enough history exists — a relative regime, not a 1.8% constant
+## Key Features
 
-Sensitivity (conservative / balanced / sensitive) only changes classification bands. Watchlist membership does not add bonus points.
+### 📊 Personalized Watchlists
 
-## Data status (configurable)
+- Create and manage watchlists
+- Add and remove stock symbols
+- View current market information for tracked stocks
+- Compare each stock against the user's acknowledged baseline
+
+### 🔎 Meaningful Change Detection
+
+The application scores market movement using multiple signals rather than a fixed percentage threshold:
+
+- Volatility-standardized price movement
+- Current volume compared with typical volume
+- Short-term vs. longer-term realized volatility
+- Configurable sensitivity: conservative, balanced, or sensitive
+
+The result is a **0–100 significance score** and a severity classification.
+
+### 🧠 Explainable Intelligence
+
+The system is intentionally explainable rather than presenting an opaque "AI score".
+
+Each detected change can include:
+
+- Change type
+- Significance score
+- Severity
+- Baseline price
+- Current price
+- Percentage movement
+- Explanation
+- Supporting evidence
+- Detection timestamp
+
+### 🕒 Correct "Last Checked" Semantics
+
+A normal `GET /dashboard` request does **not** silently change the user's baseline.
+
+The flow is:
+
+1. The dashboard loads the user's acknowledged baseline.
+2. Current shared market snapshots are retrieved.
+3. The current market state is compared with that baseline.
+4. Meaningful changes may be recorded idempotently.
+5. The user explicitly acknowledges the current state.
+6. `POST /dashboard/acknowledge` advances the baseline.
+
+This prevents repeated page refreshes from hiding changes.
+
+### 📚 Change History
+
+The History page provides:
+
+- Complete recorded change history
+- Severity filtering
+- Symbol filtering
+- Cursor-based pagination
+- Empty-state handling when no history exists
+
+### 🔐 Authentication & Account Security
+
+- JWT-based authentication
+- Password hashing
+- Token-version invalidation
+- Secure password-reset handling
+- Google Authenticator-compatible TOTP
+- QR-code based authenticator setup
+- Manual setup-key fallback
+- Six-digit authenticator verification
+- Authenticator-based password recovery
+
+New users are guided through authenticator setup during onboarding before entering the main application.
+
+### 📡 Market Data Status
+
+The application explicitly communicates the quality and age of market data:
 
 | Status | Meaning |
 | --- | --- |
-| LIVE | Provider marked live **and** quote age ≤ `LIVE_MAX_AGE_SECONDS` (default 5 minutes) |
-| DELAYED | Known delayed, still within `DELAYED_MAX_AGE_SECONDS` (default 20 minutes) |
-| STALE | Older than the delayed window (applies to formerly LIVE or DELAYED prints) |
-| UNAVAILABLE | No valid quote and no usable snapshot |
+| **LIVE** | Provider reports live data and the quote is within the configured live-age window |
+| **DELAYED** | Known delayed data that is still within the delayed-age window |
+| **STALE** | Quote is older than the delayed-age window |
+| **UNAVAILABLE** | No valid quote or usable snapshot is available |
 
-US session PRE / OPEN / CLOSED is an **approximate** regular-hours calendar (weekends + a small holiday set), not a licensed exchange feed.
+The system does not silently turn provider failures into fake LIVE prices.
 
-## Production vs development
+---
 
-| | Development | Production |
-| --- | --- | --- |
-| `SECRET_KEY` | Local placeholder allowed if unset | Process **exits** unless ≥ 32 chars and not a known insecure string |
-| `DATABASE_URL` | SQLite file or Postgres | **Postgres required.** `/tmp` SQLite is rejected |
-| Password reset | May echo `dev_reset_token` when `ENVIRONMENT=development\|test` and **not** on Vercel | Generic success only; email if SMTP is set; never return the token |
-| Mock quotes | `MARKET_DATA_PROVIDER=mock` | Do not use mock as a silent fallback |
-| Demo last-seen seed | Mock provider may seed an old baseline so the first screen shows a delta | Yahoo path never invents a prior observation |
-| Refresh | Local APScheduler | **Request-driven** on Vercel (no always-on worker). Optional `POST /internal/refresh-snapshots` with `X-Cron-Secret` if `CRON_SECRET` is set |
-| CORS | Local origins | Explicit `CORS_ORIGINS` plus this deployment’s `VERCEL_URL` — not `*.vercel.app` |
+## Architecture
 
-Password reset tokens are hashed, expire in 2 hours, and are single-use. Reset increments `token_version` so existing JWTs stop working.
+```text
+                         ┌─────────────────────┐
+                         │   React + TypeScript │
+                         │       + Vite        │
+                         └──────────┬──────────┘
+                                    │
+                              /api requests
+                                    │
+                         ┌──────────▼──────────┐
+                         │       Vercel        │
+                         │   Serverless API    │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │       FastAPI       │
+                         │  Auth / Dashboard   │
+                         │ Stocks / Watchlists │
+                         │  Changes / Settings │
+                         └───────┬───────┬─────┘
+                                 │       │
+                    ┌────────────┘       └──────────────┐
+                    │                                   │
+           ┌────────▼────────┐                 ┌────────▼────────┐
+           │ Neon PostgreSQL │                 │  Market Data     │
+           │   Persistent DB │                 │ Yahoo / Mock     │
+           └─────────────────┘                 └─────────────────┘
+```
 
-## Setup
+### Market-data flow
+
+```text
+Market Provider
+      ↓
+Validate quote + determine data age
+      ↓
+Shared snapshot cache / market_snapshots
+      ↓
+Compare with user's acknowledged user_stock_state
+      ↓
+Calculate significance + severity
+      ↓
+Create idempotent DetectedChange / notification
+      ↓
+Dashboard + History
+```
+
+---
+
+## Tech Stack
+
+### Frontend
+
+- React 19
+- TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+- Recharts
+- qrcode.react
+- Vitest
+
+### Backend
+
+- Python
+- FastAPI
+- SQLAlchemy
+- Pydantic
+- Cryptography
+- JWT authentication
+- TOTP / RFC 6238-compatible authenticator codes
+- Pytest
+
+### Data & Infrastructure
+
+- PostgreSQL / Neon
+- Redis (optional)
+- Vercel
+- Yahoo market data
+- Docker Compose for local infrastructure
+
+---
+
+## Application Areas
+
+| Area | Purpose |
+| --- | --- |
+| `/login` | User authentication |
+| `/register` | Account creation |
+| `/onboarding` | Initial setup, watchlist creation and authenticator setup |
+| `/app/overview` | Main market dashboard |
+| `/app/watchlist` | Manage tracked stocks |
+| `/app/history` | Review detected market changes |
+| `/app/security` | Manage authenticator security |
+| `/forgot-password` | Authenticator-based password recovery |
+| `/reset-password` | Password reset flow |
+
+---
+
+## API
+
+The backend is exposed under `/api` in production.
+
+### Health & market
+
+```text
+GET  /api/health
+GET  /api/market/session
+```
+
+### Authentication
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/forgot-password
+POST /api/auth/recover-password
+POST /api/auth/reset-password
+```
+
+### Authenticator
+
+```text
+POST /api/authenticator/setup
+POST /api/authenticator/verify
+GET  /api/authenticator/status
+```
+
+### Watchlists & dashboard
+
+```text
+GET  /api/watchlists
+POST /api/watchlists
+GET  /api/dashboard
+POST /api/dashboard/acknowledge
+```
+
+### Stocks & history
+
+```text
+GET  /api/stocks/...
+GET  /api/changes/history
+```
+
+### Internal refresh
+
+```text
+POST /api/internal/refresh-snapshots
+```
+
+The internal refresh endpoint requires the configured `X-Cron-Secret` and is intended for controlled scheduled refreshes.
+
+---
+
+## Data Model
+
+The application separates shared market observations from user-specific state.
+
+### `market_snapshots`
+
+Stores reusable market observations so multiple users do not need independent copies of the same quote.
+
+### `user_stock_state`
+
+Stores the last **acknowledged** state for a user's stock.
+
+### `detected_changes`
+
+Stores meaningful changes detected against the user's acknowledged baseline.
+
+### `users`
+
+Stores account information, authentication state, and encrypted authenticator configuration.
+
+This separation is central to the application's "last checked" behavior.
+
+---
+
+## Production Configuration
+
+Production requires a persistent PostgreSQL database and a secure secret key.
+
+Important environment variables include:
+
+```env
+ENVIRONMENT=production
+SECRET_KEY=<secure-secret>
+DATABASE_URL=<neon-postgresql-url>
+MARKET_DATA_PROVIDER=yahoo
+CORS_ORIGINS=<allowed-origins>
+```
+
+Optional infrastructure/configuration:
+
+```env
+REDIS_URL=<redis-url>
+CRON_SECRET=<cron-secret>
+SNAPSHOT_RETENTION_DAYS=14
+LIVE_MAX_AGE_SECONDS=300
+DELAYED_MAX_AGE_SECONDS=1200
+```
+
+Development can explicitly use:
+
+```env
+MARKET_DATA_PROVIDER=mock
+```
+
+Mock market data is never intended to be a silent production fallback.
+
+---
+
+## Local Development
+
+### Backend
 
 ```bash
-docker compose up -d   # Postgres + Redis if you use Compose
-cp .env.example backend/.env
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt
-cd frontend && npm install && cd ..
+cd backend
+PYTHONPATH=. uvicorn app.main:app --host 127.0.0.1 --port 8765
+```
 
-cd backend && PYTHONPATH=. uvicorn app.main:app --host 127.0.0.1 --port 8765
-cd frontend && npm run dev   # http://127.0.0.1:43123
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ### Tests
 
+Backend:
+
 ```bash
-cd backend && PYTHONPATH=. pytest
-cd frontend && npm test && npm run build
+cd backend
+PYTHONPATH=. pytest
 ```
 
-## Intentional limitations
+Frontend:
 
-- Yahoo quotes are **delayed**. We do not claim a dark pool, event calendar, or FX conversion.
-- In-app notifications are preference-gated records, not email/push delivery (unless you add SMTP for password reset only).
-- Snapshot rows older than `SNAPSHOT_RETENTION_DAYS` (default 14) are pruned on refresh.
-- Circuit/cooldown on provider 429 is per-process (Redis if available), not a global mesh.
-
-## Folder structure
-
+```bash
+cd frontend
+npm test
+npm run lint
+npm run build
 ```
-backend/app/           API, models, market, intelligence
-backend/tests/         pytest
-frontend/src/pages     routes
+
+### Docker
+
+For local PostgreSQL and Redis:
+
+```bash
+docker compose up -d
 ```
+
+---
+
+## Production vs Development
+
+| Capability | Development | Production |
+| --- | --- | --- |
+| Database | SQLite or PostgreSQL | PostgreSQL required |
+| Secret key | Local placeholder permitted | Strong secret required |
+| Market data | Mock or Yahoo | Yahoo / configured provider |
+| Refresh | Background scheduler | Request-driven on Vercel |
+| Redis | Optional | Optional with TTL fallback |
+| CORS | Local origins | Explicit configured origins |
+| Password recovery | Development helpers available | Secure production flow |
+| Authenticator | Available | Recommended as part of onboarding |
+
+---
+
+## Security Design
+
+The application includes several defensive controls for production use:
+
+- Passwords are hashed rather than stored in plaintext.
+- JWT sessions can be invalidated through token-version changes.
+- Password-reset tokens are hashed, expire, and are single-use.
+- Production rejects weak/insecure `SECRET_KEY` configuration.
+- Authenticator secrets are encrypted at rest using a key derived from the application secret.
+- TOTP verification accepts a small clock-skew window.
+- CORS is explicitly configured rather than allowing every Vercel domain.
+- Provider failures do not create fabricated LIVE market prices.
+
+**Never commit production secrets, database credentials, API keys, or `.env` files to Git.**
+
+---
+
+## Intentional Limitations
+
+- Yahoo market data can be delayed; the application does not claim exchange-grade real-time data.
+- The US market session calendar is an approximation and is not a licensed exchange calendar.
+- The application does not provide dark-pool data, event-calendar intelligence, or FX conversion.
+- In-app notifications are application records rather than guaranteed email/push delivery.
+- Redis is optional; fallback caching is process-local.
+- Snapshot retention defaults to 14 days.
+
+---
+
+## Project Structure
+
+```text
+stock_watchlist/
+│
+├── api/
+│   └── index.py                 # Vercel API entry point
+│
+├── backend/
+│   ├── app/
+│   │   ├── routers/             # API routes
+│   │   ├── market/              # Market data and session logic
+│   │   ├── intelligence/        # Significance/change detection
+│   │   ├── models.py             # SQLAlchemy models
+│   │   ├── schemas.py            # Pydantic schemas
+│   │   ├── security.py           # Auth + TOTP security
+│   │   ├── db.py                 # Database setup/schema compatibility
+│   │   ├── config.py             # Application configuration
+│   │   └── main.py               # FastAPI application
+│   │
+│   └── tests/                   # Backend tests
+│
+├── frontend/
+│   ├── public/                  # Static assets
+│   └── src/
+│       ├── components/          # Reusable UI components
+│       ├── layouts/             # Application layouts
+│       ├── pages/               # Application pages
+│       └── services/            # API client
+│
+├── .env.example
+├── docker-compose.yml
+├── pyproject.toml
+├── requirements.txt
+├── vercel.json
+└── README.md
+```
+
+---
+
+## Deployment
+
+The production application is deployed using **Vercel**.
+
+### Deployment architecture
+
+```text
+GitHub main
+    ↓
+Vercel deployment
+    ↓
+React/Vite frontend
+    +
+FastAPI serverless API
+    ↓
+Neon PostgreSQL
+```
+
+Production environment variables are configured in Vercel rather than committed to the repository.
+
+### Production URL
+
+**https://stockmarketwatchlist-sanvi0401s-projects.vercel.app**
+
+---
+
+## Design Principles
+
+### Business first. Signal second. Technology third.
+
+The application is designed around a user problem rather than simply exposing stock prices.
+
+Instead of asking:
+
+> "What is the stock price right now?"
+
+it asks:
+
+> **"What changed, how significant is it, and has the user already acknowledged it?"**
+
+That principle drives the data model, change-detection logic, dashboard behavior, and history system.
+
+---
+
+## Status
+
+**Production deployment:** Live
+
+**Primary stack:** React + TypeScript + FastAPI + SQLAlchemy + PostgreSQL/Neon + Vercel
+
+**Market data:** Yahoo / explicitly configured provider
+
+**Authentication:** JWT + Google Authenticator-compatible TOTP
+
+---
+
+## Author
+
+**Sanvi Devnani**
+
+GitHub: https://github.com/sanvi0401
+
+Repository: https://github.com/sanvi0401/stock_watchlist
