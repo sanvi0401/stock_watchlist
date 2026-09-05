@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings, validate_settings
-from app.db import Base, engine, ensure_detected_change_columns
+from app.db import Base, engine, ensure_authenticator_columns, ensure_detected_change_columns
 from app.errors import AppError, unhandled_exception_handler
 from app.market.calendar import us_equity_session
 from app.routers import auth, changes, dashboard, settings as settings_router, stocks, watchlists
@@ -35,6 +35,7 @@ def on_startup() -> None:
     validate_settings(settings)
     Base.metadata.create_all(bind=engine)
     ensure_detected_change_columns()
+    ensure_authenticator_columns()
     if not os.getenv("VERCEL"):
         start_scheduler(settings.snapshot_refresh_seconds)
 
