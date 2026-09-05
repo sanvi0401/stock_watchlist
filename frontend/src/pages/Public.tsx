@@ -25,17 +25,17 @@ export function LandingPage() {
       <section className="mx-auto max-w-3xl px-6 py-20 text-center">
         <h1 className="text-4xl font-semibold tracking-tight md:text-[40px] md:leading-[48px]">Know what changed. Know what matters.</h1>
         <p className="mt-4 text-on-surface-variant">
-          Smart Market Watch remembers what you last saw, scores unusual movement against each name’s own volatility, and tells you why it deserves attention. NSE, BSE, US and other Yahoo-covered exchanges.
+          Smart Market Watch remembers what you last saw, scores unusual movement against each name’s own volatility, and tells you why it deserves attention.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link to="/signup"><Button>Get Started</Button></Link>
-          <Link to="/login"><Button variant="outline">Log in</Button></Link>
+          <Link to="/login"><Button variant="outline">Explore Terminal View</Button></Link>
         </div>
       </section>
       <section id="features" className="mx-auto grid max-w-6xl gap-4 px-6 pb-16 md:grid-cols-3">
         {[
           ['Track', 'Last-seen baselines per symbol, not a generic price ticker. We remember the last price you actually looked at.'],
-          ['Detect', 'Significance from price abnormality, volume, and volatility — not raw %. A 2% move in TCS is not the same as 2% in a small cap.'],
+          ['Detect', 'Significance from price abnormality, volume, and volatility — not raw %. A 2% move in NVDA is not the same as 2% in COST.'],
           ['Understand', 'Plain-language “why this matters” on every high-priority move, with evidence you can audit.'],
         ].map(([t, b]) => (
           <Card key={t}>
@@ -51,11 +51,11 @@ export function LandingPage() {
           <div className="mt-4 grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="font-semibold text-primary">Last-seen state</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">When you open Overview we compare today to the price you saw on your previous visit — not yesterday’s close. Refreshing within a visit keeps the same baseline. The first visit records a baseline and never claims a fake “move.”</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">When you open Overview we compare today to the last price you marked as seen — not a GET refresh. First visit shows context only until you acknowledge.</p>
             </div>
             <div>
               <h3 className="font-semibold text-primary">Significance 0–100</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">STABLE 0–29 · NOTABLE 30–59 · MEANINGFUL 60–79 · HIGH 80–100. The move is measured in units of that name’s own typical daily range, so noisy names do not constantly scream. Volume can back up a move but never invent one.</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">STABLE 0–29 · NOTABLE 30–59 · MEANINGFUL 60–79 · HIGH 80–100. The score uses that name’s own volatility and volume so noisy names do not constantly scream.</p>
             </div>
             <div>
               <h3 className="font-semibold text-primary">Why this matters</h3>
@@ -63,7 +63,7 @@ export function LandingPage() {
             </div>
             <div>
               <h3 className="font-semibold text-primary">Data honesty</h3>
-              <p className="mt-2 text-sm text-[#CBD5E1]">Quotes are labeled LIVE, DELAYED, STALE, or UNAVAILABLE using each exchange’s own hours. Yahoo delayed quotes are the default. Unavailable prints never overwrite a valid last-seen price.</p>
+              <p className="mt-2 text-sm text-[#CBD5E1]">Quotes are labeled LIVE, DELAYED, STALE, or UNAVAILABLE. Yahoo delayed quotes are the default. Unavailable prints never overwrite a valid last-seen price.</p>
             </div>
           </div>
         </Card>
@@ -73,11 +73,11 @@ export function LandingPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Methodology</p>
           <h2 className="mt-1 text-2xl font-semibold">How a check is calculated</h2>
           <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm text-[#CBD5E1]">
-            <li>Load your previous last-seen price for each symbol on your watchlists.</li>
-            <li>Fetch a delayed Yahoo quote for that exchange (price in its own currency, previous close, volume, 52-week range, recent closes, session hours).</li>
-            <li>Compute percent change since you last looked, and today’s percent vs previous close.</li>
-            <li>Score the move against that symbol’s recent volatility and whether volume is unusual.</li>
-            <li>Write a short explanation, rank HIGH → MEANINGFUL → NOTABLE → STABLE, then record this visit so the next one compares against it.</li>
+            <li>Load your last acknowledged price for each symbol (none yet = no “since last check” claim).</li>
+            <li>Fetch a delayed Yahoo quote (or the latest persisted snapshot if the provider fails).</li>
+            <li>Compute percent change versus that baseline, and today’s percent vs previous close.</li>
+            <li>Score the move as a volatility-standardized unit of that name’s own recent daily returns, plus session-scaled volume and short-vs-long realized vol.</li>
+            <li>Write a short explanation and rank HIGH → MEANINGFUL → NOTABLE → STABLE. Last-seen advances only when you mark the check as seen.</li>
           </ol>
           <p className="mt-4 text-sm text-[#94A3B8]">This is monitoring, not advice. Delayed data can lag the tape by minutes. Add names by company (“Google”) or ticker (GOOGL) from Discover or a watchlist.</p>
         </Card>
@@ -105,7 +105,7 @@ function AuthFrame({ title, children }: { title: string; children: React.ReactNo
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10">
       <Card className="w-full max-w-md p-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Smart Market Watch</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Market Watch Terminal</p>
         <h1 className="mt-2 text-2xl font-semibold">{title}</h1>
         {children}
       </Card>
@@ -139,11 +139,11 @@ export function SignUpPage() {
   }
   return (
     <AuthFrame title="Create your Market Watch account">
-      <p className="mt-1 text-sm text-[#94A3B8]">Takes about a minute. No email verification in this demo.</p>
+      <p className="mt-1 text-sm text-[#94A3B8]">Set up intelligent watchlist monitoring in under 2 minutes.</p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-        <div><Label>Full Name</Label><Input name="name" required autoComplete="name" /></div>
-        <div><Label>Email</Label><Input name="email" type="email" required autoComplete="email" /></div>
-        <div><Label>Password</Label><Input name="password" type="password" minLength={8} maxLength={72} required autoComplete="new-password" /></div>
+        <div><Label>Full Name</Label><Input name="name" required defaultValue="Sanvi Patel" /></div>
+        <div><Label>Work / Investor Email</Label><Input name="email" type="email" required /></div>
+        <div><Label>Password</Label><Input name="password" type="password" minLength={8} required /></div>
         <label className="flex items-start gap-2 text-sm text-[#CBD5E1]">
           <input type="checkbox" className="mt-1" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required />
           <span>
@@ -194,17 +194,14 @@ export function LoginPage() {
 
 export function ForgotPage() {
   const [msg, setMsg] = useState('')
-  const [resetUrl, setResetUrl] = useState('')
   const [err, setErr] = useState('')
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErr('')
-    setResetUrl('')
     const fd = new FormData(e.currentTarget)
     try {
       const res = await api.forgot(String(fd.get('email')))
-      setMsg(res.message || 'If that email exists, a reset link was issued.')
-      if (res.reset_url) setResetUrl(res.reset_url)
+      setMsg(res.message || 'If that email is registered, follow the reset instructions.')
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : 'Could not start a reset')
     }
@@ -212,19 +209,14 @@ export function ForgotPage() {
   return (
     <AuthFrame title="Reset your password">
       <p className="mt-2 text-sm text-[#94A3B8]">
-        This demo has no email service. Outside production the one-time reset link is shown here instead.
+        We never confirm whether an email exists. If SMTP is configured, a single-use link is emailed. Production responses never include a reset token.
       </p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
         <div><Label>Email</Label><Input name="email" type="email" required /></div>
-        <Button className="w-full" type="submit">Create reset link</Button>
+        <Button className="w-full" type="submit">Request reset</Button>
       </form>
       {err ? <p className="mt-3 text-sm text-loss">{err}</p> : null}
       {msg ? <p className="mt-3 text-sm text-[#CBD5E1]">{msg}</p> : null}
-      {resetUrl ? (
-        <p className="mt-3 text-sm">
-          <a className="text-primary break-all underline" href={resetUrl}>Open password reset link</a>
-        </p>
-      ) : null}
     </AuthFrame>
   )
 }

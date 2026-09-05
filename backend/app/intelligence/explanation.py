@@ -1,8 +1,3 @@
-"""Plain-language explanation of a change, with the evidence used to reach it."""
-
-from __future__ import annotations
-
-
 def explain_change(
     symbol: str,
     pct_change: float,
@@ -11,59 +6,60 @@ def explain_change(
     severity: str,
     first_seen: bool,
     data_status: str,
-    *,
-    sigma: float = 0.0,
-    baseline_label: str = "since you last checked",
+    volatility_units: float | None = None,
+    regime_label: str | None = None,
 ) -> tuple[str, str, list[str]]:
     if first_seen:
         return (
             "initialized",
-            f"{symbol} was added to your watchlist. This price is your baseline; no change is claimed until you come back.",
-            ["First observation recorded", f"Typical daily move ≈ {volatility:.1%}"],
+            f"{symbol} has no acknowledged baseline yet. This price is shown for context; "
+            "we will not claim a change until you mark this check as seen.",
+            ["No prior acknowledgement", f"Recent daily volatility ≈ {volatility:.1%}"],
         )
     if data_status == "UNAVAILABLE":
         return (
             "data_unavailable",
-            f"Quotes for {symbol} are unavailable right now. Your last valid price was kept and is not treated as current.",
-            ["Provider returned nothing valid", "Previous state preserved"],
+            f"Quotes for {symbol} are unavailable. Your last acknowledged price was kept "
+            "and is not treated as a live print.",
+            ["Provider miss", "Acknowledged baseline preserved"],
         )
 
-    direction = "up" if pct_change >= 0 else "down"
-    vol_txt = f"{volume_ratio:.1f}× its usual volume" if volume_ratio else "typical volume"
+    direction = "increased" if pct_change >= 0 else "declined"
+    vol_txt = f"{volume_ratio:.1f}× typical volume (session-scaled)" if volume_ratio else "typical volume"
+    units_txt = f"{volatility_units:.1f}× its recent daily volatility" if volatility_units is not None else "its own recent volatility"
     evidence = [
-        f"Move {baseline_label}: {pct_change:+.2f}%",
-        f"That is {sigma:.1f}× this name's typical daily move ({volatility:.1%})",
-        f"Volume: {vol_txt}",
-        f"Feed: {data_status}",
+        f"Move since last acknowledged check: {pct_change:+.2f}%",
+        f"Volatility-standardized move: {units_txt}",
+        f"Volume vs typical: {vol_txt}",
+        f"Feed status: {data_status}",
     ]
+    if regime_label and regime_label not in {"insufficient_history", "typical_regime"}:
+        evidence.append(f"Short vs longer realized vol: {regime_label.replace('_', ' ')}")
 
     if severity == "HIGH":
         change_type = "high_significance_move"
         text = (
-            f"{symbol} is {direction} {abs(pct_change):.1f}% {baseline_label}, "
-            f"about {sigma:.1f}× its normal daily range, on {vol_txt}. This is unusual for {symbol}."
+            f"{symbol} {direction} {abs(pct_change):.1f}% since you last acknowledged a check — "
+            f"{units_txt}, with {vol_txt}."
         )
     elif severity == "MEANINGFUL":
         change_type = "meaningful_move"
         text = (
-            f"{symbol} moved {direction} {abs(pct_change):.1f}% {baseline_label}. "
-            f"Larger than its usual day ({sigma:.1f}× typical) with {vol_txt}."
+            f"{symbol} {direction} {abs(pct_change):.1f}% since your last acknowledged check. "
+            f"Large relative to {units_txt} ({vol_txt})."
         )
     elif severity == "NOTABLE":
         change_type = "notable_move"
         text = (
-            f"{symbol} is {direction} {abs(pct_change):.1f}% {baseline_label}. "
-            "Worth a glance, but inside its normal range."
+            f"{symbol} {direction} {abs(pct_change):.1f}% since you last acknowledged a check. "
+            "Worth a glance, still inside a broader normal band."
         )
     else:
         change_type = "stable"
-        text = f"{symbol} is within its normal range {baseline_label} ({pct_change:+.2f}%)."
-        if volume_ratio >= 1.5:
-            text += f" Volume is elevated ({volume_ratio:.1f}× usual) but the price has not moved with it."
-        else:
-            text += " Nothing unusual in volume."
-    if data_status == "STALE":
-        text += " The quote is stale, so treat the size of this move with caution."
-    elif data_status == "DELAYED":
-        text += " Quote is delayed, not live."
+        text = (
+            f"{symbol} is within its normal band since you last acknowledged a check "
+            f"({pct_change:+.2f}%)."
+        )
+    if data_status in {"STALE", "DELAYED"}:
+        text += f" Quote is {data_status.lower()} — not a live print."
     return change_type, text, evidence

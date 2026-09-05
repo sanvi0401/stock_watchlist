@@ -1,25 +1,46 @@
 import os
-from pathlib import Path
+import sys
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
+KNOWN_INSECURE_SECRETS = {
+    "",
+    "dev-change-me-in-production",
+    "replace-with-a-long-random-string",
+    "test-secret",
+    "secret",
+    "changeme",
+}
+
+LOCAL_DEV_SECRET = "local-dev-only-not-for-production-0001"
+
+
+def _default_environment() -> str:
+    explicit = (os.getenv("ENVIRONMENT") or "").strip().lower()
+    if explicit:
+        return explicit
+    if os.getenv("VERCEL"):
+        return "production"
+    return "development"
 
 
 def _default_database_url() -> str:
-    # Zero-setup local default. Postgres is opt-in through DATABASE_URL.
-    if os.getenv("VERCEL"):
-        return "sqlite+pysqlite:////tmp/marketwatch.db"
-    return f"sqlite+pysqlite:///{_BACKEND_DIR / 'marketwatch.db'}"
+    env = _default_environment()
+    if os.getenv("DATABASE_URL"):
+        return os.getenv("DATABASE_URL", "")
+    if env in {"development", "test"}:
+        return "sqlite+pysqlite:///./marketwatch.dev.db"
+    return ""
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    app_name: str = "Smart Market Watch"
-    environment: str = "development"
-    secret_key: str = "dev-change-me-in-production"
-    access_token_expire_minutes: int = 60 * 24 * 7
+    app_name: str = "Market Watch"
+    environment: str = _default_environment()
+    secret_key: str = ""
+    access_token_expire_minutes: int = 60 * 24
     database_url: str = _default_database_url()
     redis_url: str = "redis://127.0.0.1:6379/0"
     cors_origins: str = "http://127.0.0.1:43123,http://localhost:43123"
@@ -27,42 +48,48 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = ""
     cache_ttl_seconds: int = 60
     snapshot_refresh_seconds: int = 120
-    # A dashboard load within this window counts as the same "visit": the
-    # comparison baseline is not rolled forward, so refreshing does not
-    # erase what changed since the previous visit.
-    check_session_minutes: int = 10
-    # While the market is open, a quote older than this is STALE.
-    stale_after_minutes: int = 20
-    max_symbols_per_watchlist: int = 100
-    # After a provider failure, skip the provider for this long and serve snapshots as STALE.
-    provider_cooldown_seconds: int = 60
-    # Per-IP limit on sign-in / sign-up / reset endpoints.
-    auth_rate_limit_per_minute: int = 20
     public_app_url: str = "http://127.0.0.1:43123"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    live_max_age_seconds: int = 5 * 60
+    delayed_max_age_seconds: int = 20 * 60
+    stale_max_age_seconds: int = 24 * 60 * 60
+    snapshot_retention_days: int = 14
+    cron_secret: str = ""
+    auth_rate_limit_per_minute: int = 20
+
+    @model_validator(mode="after")
+    def _dev_secret_if_empty(self):
+        if self.environment in {"development", "test"} and not self.secret_key:
+            self.secret_key = LOCAL_DEV_SECRET
+        return self
 
     @property
     def is_production(self) -> bool:
-        return self.environment.lower() == "production"
+        return self.environment == "production"
 
     @property
-    def show_reset_link(self) -> bool:
-        # No SMTP in this project. Outside production the reset link is
-        # returned in the response so the flow can be exercised end to end.
-        return not self.is_production
+    def is_dev_or_test(self) -> bool:
+        return self.environment in {"development", "test"}
 
     @property
-    def persistence_mode(self) -> str:
-        if self.database_url.startswith("sqlite") and "/tmp/" in self.database_url:
-            return "ephemeral"
-        return "durable"
+    def allow_dev_reset_echo(self) -> bool:
+        if os.getenv("VERCEL"):
+            return False
+        return self.environment in {"development", "test"}
 
     @property
     def cors_origin_list(self) -> list[str]:
         origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-        for var in ("VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
-            host = os.getenv(var)
-            if host:
-                origins.append(f"https://{host}")
+        vercel_url = os.getenv("VERCEL_URL")
+        if vercel_url:
+            origins.append(f"https://{vercel_url}")
+        prod = os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+        if prod:
+            origins.append(f"https://{prod}")
         return origins or ["http://127.0.0.1:43123"]
 
     @property
@@ -72,6 +99,37 @@ class Settings(BaseSettings):
             host = vercel if vercel.startswith("http") else f"https://{vercel}"
             return host.rstrip("/")
         return (self.public_app_url or "http://127.0.0.1:43123").rstrip("/")
+
+    @property
+    def frontend_origin(self) -> str:
+        return self.public_url
+
+
+def validate_settings(cfg: "Settings | None" = None) -> None:
+    cfg = cfg or settings
+    if not cfg.is_production:
+        if not cfg.secret_key:
+            cfg.secret_key = LOCAL_DEV_SECRET
+        return
+    if cfg.secret_key in KNOWN_INSECURE_SECRETS or len(cfg.secret_key) < 32:
+        print(
+            "FATAL: production requires SECRET_KEY of at least 32 characters "
+            "and must not be a committed fallback.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    url = (cfg.database_url or "").lower()
+    if not url or "/tmp/" in url or ":memory:" in url or "sqlite" in url:
+        print(
+            "FATAL: production requires a persistent DATABASE_URL "
+            "(Postgres). Ephemeral SQLite is not allowed.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
+def get_settings() -> Settings:
+    return settings
 
 
 settings = Settings()

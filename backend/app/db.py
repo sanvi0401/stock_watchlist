@@ -3,12 +3,14 @@ from collections.abc import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.config import settings
+from app.config import settings, validate_settings
 
 
 class Base(DeclarativeBase):
     pass
 
+
+validate_settings(settings)
 
 _engine_kwargs: dict = {"pool_pre_ping": True}
 if settings.database_url.startswith("sqlite"):

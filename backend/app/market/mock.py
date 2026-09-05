@@ -1,69 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
-from app.market.freshness import exchange_for
 from app.market.types import NormalizedQuote
 
 UNIVERSE: dict[str, dict] = {
-    "RELIANCE.NS": {
-        "name": "Reliance Industries Limited",
-        "price": 1322.00,
-        "previous_close": 1301.50,
-        "volume": 14_200_000,
-        "average_volume": 9_800_000,
-        "volatility": 0.014,
-        "market_cap": 1.79e13,
-        "week_52_high": 1551.00,
-        "week_52_low": 1115.55,
-        "last_seen_demo": 1290.00,
-        "spark": [1280, 1284, 1290, 1296, 1301, 1305, 1315, 1322.00],
-        "currency": "INR",
-        "exchange": "NSI",
-    },
-    "TCS.NS": {
-        "name": "Tata Consultancy Services Limited",
-        "price": 3092.40,
-        "previous_close": 3110.10,
-        "volume": 2_100_000,
-        "average_volume": 2_400_000,
-        "volatility": 0.012,
-        "market_cap": 1.12e13,
-        "week_52_high": 4592.25,
-        "week_52_low": 2866.60,
-        "last_seen_demo": 3115.00,
-        "spark": [3130, 3125, 3118, 3112, 3110, 3105, 3098, 3092.40],
-        "currency": "INR",
-        "exchange": "NSI",
-    },
-    "INFY.NS": {
-        "name": "Infosys Limited",
-        "price": 1488.20,
-        "previous_close": 1436.90,
-        "volume": 18_900_000,
-        "average_volume": 7_600_000,
-        "volatility": 0.015,
-        "market_cap": 6.2e12,
-        "week_52_high": 2006.45,
-        "week_52_low": 1307.00,
-        "last_seen_demo": 1430.00,
-        "spark": [1420, 1424, 1428, 1432, 1436, 1440, 1470, 1488.20],
-        "currency": "INR",
-        "exchange": "NSI",
-    },
-    "HDFCBANK.NS": {
-        "name": "HDFC Bank Limited",
-        "price": 968.35,
-        "previous_close": 966.10,
-        "volume": 11_300_000,
-        "average_volume": 12_100_000,
-        "volatility": 0.011,
-        "market_cap": 1.49e13,
-        "week_52_high": 1018.85,
-        "week_52_low": 806.50,
-        "last_seen_demo": 966.00,
-        "spark": [960, 962, 963, 965, 966, 967, 968, 968.35],
-        "currency": "INR",
-        "exchange": "NSI",
-    },
     "NVDA": {
         "name": "NVIDIA Corporation",
         "price": 172.38,
@@ -124,7 +63,7 @@ UNIVERSE: dict[str, dict] = {
         "average_volume": 21_000_000,
         "volatility": 0.018,
         "market_cap": 2.2e12,
-        "week_52_high": 312.0,
+        "week_52_high": 207.05 if False else 312.0,
         "week_52_low": 140.53,
         "last_seen_demo": 283.20,
         "spark": [280, 281, 282, 283, 283.5, 284, 284.05, 284.10],
@@ -230,13 +169,17 @@ class MockMarketDataProvider:
         self.force_status = force_status
 
     def _to_quote(self, symbol: str, row: dict) -> NormalizedQuote:
-        status = self.force_status or "LIVE"
+        status = self.force_status or "DELAYED"
         now = datetime.now(UTC)
         if status == "STALE":
             now = now - timedelta(hours=6)
         if status == "DELAYED":
             now = now - timedelta(minutes=15)
-        info = exchange_for(row.get("exchange"), symbol)
+        if status == "LIVE":
+            now = datetime.now(UTC)
+        spark = list(row.get("spark") or [])
+        from app.market.calendar import us_equity_session
+
         return NormalizedQuote(
             symbol=symbol,
             company_name=row["name"],
@@ -251,12 +194,9 @@ class MockMarketDataProvider:
             timestamp=now,
             source=self.source,
             data_status=status,
-            market_state="UNKNOWN",
-            sparkline=list(row.get("spark") or []),
-            currency=str(row.get("currency") or info.currency),
-            exchange=info.code,
-            exchange_name=info.name,
-            timezone=info.timezone,
+            market_state="UNKNOWN" if status == "UNAVAILABLE" else us_equity_session(now),
+            sparkline=spark,
+            recent_closes=spark,
         )
 
     def get_quote(self, symbol: str) -> NormalizedQuote | None:
@@ -281,6 +221,21 @@ class MockMarketDataProvider:
                 if quote:
                     out.append(quote)
         return out[:12]
+
+    def get_history(self, symbol: str, range_key: str) -> list:
+        from app.market.types import HistoryPoint
+
+        quote = self.get_quote(symbol)
+        if not quote:
+            return []
+        n = {"1d": 2, "5d": 5, "1mo": 21, "1y": min(len(quote.recent_closes), 60)}.get(range_key, 5)
+        closes = quote.recent_closes[-n:] if quote.recent_closes else [quote.price]
+        now = quote.timestamp
+        out = []
+        for i, c in enumerate(closes):
+            ts = now - timedelta(days=len(closes) - 1 - i)
+            out.append(HistoryPoint(timestamp=ts, close=c, volume=quote.volume))
+        return out
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]:
         return {s.upper(): self.get_quote(s) for s in symbols}

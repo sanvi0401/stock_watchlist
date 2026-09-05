@@ -6,10 +6,9 @@ from datetime import UTC, datetime
 
 import httpx
 
-from app.market.freshness import session_timestamp
-from app.market.mock import UNIVERSE, MockMarketDataProvider
-from app.market.types import NormalizedQuote
-from app.market.yahoo_meta import exchange_context, previous_close, search_rows
+from app.market.calendar import us_equity_session
+from app.market.circuit import ProviderLimited
+from app.market.types import HistoryPoint, NormalizedQuote
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ _UA = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 _CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_SEARCH = "https://query1.finance.yahoo.com/v1/finance/search"
 
 
 def _num(value, default: float = 0.0) -> float:
@@ -33,17 +33,18 @@ def _num(value, default: float = 0.0) -> float:
 
 
 class YahooHttpProvider:
-    """Delayed Yahoo quotes over public chart/search HTTP APIs (no pandas/yfinance). Any exchange."""
+    """Delayed Yahoo quotes over public chart/search HTTP APIs (no pandas/yfinance)."""
 
-    source = "yahoo"
+    source = "yfinance"
 
     def __init__(self) -> None:
         self._client = httpx.Client(timeout=12.0, headers={"User-Agent": _UA, "Accept": "application/json"})
 
     def _from_chart(self, symbol: str) -> NormalizedQuote | None:
-        resp = self._client.get(_CHART.format(symbol=symbol), params={"interval": "1d", "range": "1y"})
-        if resp.status_code == 404:
-            return None
+        resp = self._client.get(
+            _CHART.format(symbol=symbol),
+            params={"interval": "1d", "range": "1y"},
+        )
         resp.raise_for_status()
         payload = resp.json()
         results = (payload.get("chart") or {}).get("result") or []
@@ -52,32 +53,20 @@ class YahooHttpProvider:
         result = results[0]
         meta = result.get("meta") or {}
         quotes = ((result.get("indicators") or {}).get("quote") or [{}])[0]
-        stamps = result.get("timestamp") or []
-        bars: list[tuple[datetime, float]] = []
-        for i, c in enumerate(quotes.get("close") or []):
-            if c is None or c != c:
-                continue
-            try:
-                when = datetime.fromtimestamp(int(stamps[i]), tz=UTC) if i < len(stamps) else datetime.now(UTC)
-            except (TypeError, ValueError, OSError):
-                when = datetime.now(UTC)
-            bars.append((when, float(c)))
-        closes = [c for _, c in bars]
+        closes = [c for c in (quotes.get("close") or []) if c is not None]
         highs = [c for c in (quotes.get("high") or []) if c is not None]
         lows = [c for c in (quotes.get("low") or []) if c is not None]
         volumes = [c for c in (quotes.get("volume") or []) if c is not None]
-        if not closes:
+        if len(closes) < 2:
             return None
 
-        ctx = exchange_context(meta)
         price = _num(meta.get("regularMarketPrice"), closes[-1])
-        prev = previous_close(bars, ctx["print_time"], ctx["timezone"]) or price
-        if price <= 0 or prev <= 0:
+        previous_close = closes[-2]
+        if price <= 0 or previous_close <= 0:
             return None
 
         volume = _num(meta.get("regularMarketVolume"), volumes[-1] if volumes else 0)
-        window_v = volumes[-60:]
-        avg_vol = sum(window_v) / len(window_v) if window_v else volume
+        avg_vol = sum(volumes[-60:]) / max(len(volumes[-60:]), 1) if volumes else volume
         rets = []
         window = closes[-61:]
         for i in range(1, len(window)):
@@ -85,19 +74,26 @@ class YahooHttpProvider:
                 rets.append((window[i] - window[i - 1]) / window[i - 1])
         if rets:
             mean = sum(rets) / len(rets)
-            volatility = (sum((x - mean) ** 2 for x in rets) / len(rets)) ** 0.5 or 0.02
+            variance = sum((x - mean) ** 2 for x in rets) / len(rets)
+            volatility = variance ** 0.5 or 0.02
         else:
             volatility = 0.02
 
-        ts = ctx["print_time"]
-        if ts is None:
-            ts = session_timestamp(bars[-1][0], exchange=ctx["exchange"], symbol=symbol, timezone=ctx["timezone"])
+        spark = [float(x) for x in closes[-12:]]
+        name = str(meta.get("shortName") or symbol)
+        ts = datetime.now(UTC)
+        try:
+            stamps = result.get("timestamp") or []
+            if stamps:
+                ts = datetime.fromtimestamp(int(stamps[-1]), tz=UTC)
+        except (TypeError, ValueError, OSError):
+            ts = datetime.now(UTC)
 
         return NormalizedQuote(
             symbol=symbol,
-            company_name=ctx["company_name"] or UNIVERSE.get(symbol, {}).get("name") or symbol,
+            company_name=name,
             price=price,
-            previous_close=prev,
+            previous_close=_num(previous_close),
             volume=volume,
             average_volume=_num(avg_vol, volume),
             volatility=volatility,
@@ -107,14 +103,9 @@ class YahooHttpProvider:
             timestamp=ts,
             source=self.source,
             data_status="DELAYED",
-            market_state="UNKNOWN",
-            sparkline=closes[-12:],
-            currency=ctx["currency"],
-            exchange=ctx["exchange"],
-            exchange_name=ctx["exchange_name"],
-            timezone=ctx["timezone"],
-            session_start=ctx["session_start"],
-            session_end=ctx["session_end"],
+            market_state=us_equity_session(ts),
+            sparkline=spark,
+            recent_closes=[float(x) for x in closes[-60:]],
         )
 
     def get_quote(self, symbol: str) -> NormalizedQuote | None:
@@ -126,27 +117,46 @@ class YahooHttpProvider:
             if quote:
                 return quote
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 429:
-                raise  # let the service start a cooldown instead of hammering Yahoo
-            logger.warning("yahoo http quote failed for %s: %s", key, exc)
+            if exc.response is not None and exc.response.status_code == 429:
+                raise ProviderLimited(60) from exc
+            logger.warning("yahoo http quote failed for %s", key, exc_info=True)
         except Exception:  # noqa: BLE001
             logger.warning("yahoo http quote failed for %s", key, exc_info=True)
-        return MockMarketDataProvider().get_quote(key)
+        return None
 
     def search(self, query: str) -> list[NormalizedQuote]:
-        rows = search_rows(query, limit=8, client=self._client)
-        quotes = self.get_quotes([r["symbol"] for r in rows])
-        out: list[NormalizedQuote] = []
+        q = query.strip()
+        if not q:
+            return []
+        symbols: list[str] = []
+        names: dict[str, str] = {}
+        try:
+            resp = self._client.get(_SEARCH, params={"q": q, "quotesCount": 8, "newsCount": 0})
+            resp.raise_for_status()
+            rows = resp.json().get("quotes") or []
+        except Exception:  # noqa: BLE001
+            rows = []
         for row in rows:
-            quote = quotes.get(row["symbol"])
+            symbol = str(row.get("symbol") or "").upper()
+            qtype = str(row.get("quoteType") or "").upper()
+            if not symbol or symbol in names:
+                continue
+            if qtype not in {"", "EQUITY", "ETF"}:
+                continue
+            names[symbol] = str(row.get("shortname") or row.get("longname") or symbol)
+            symbols.append(symbol)
+            if len(symbols) >= 6:
+                break
+        quotes = self.get_quotes(symbols)
+        out: list[NormalizedQuote] = []
+        for symbol in symbols:
+            quote = quotes.get(symbol)
             if quote:
-                if quote.source != self.source and row.get("name"):
-                    quote.company_name = row["name"]
+                if names.get(symbol):
+                    quote.company_name = names[symbol]
                 out.append(quote)
-        seen = {q.symbol for q in out}
-        for quote in MockMarketDataProvider().search(query):
-            if quote.symbol not in seen and len(out) < 8:
-                out.append(quote)
+        if len(out) < 8:
+            return out
         return out
 
     def get_quotes(self, symbols: list[str]) -> dict[str, NormalizedQuote | None]:
@@ -158,15 +168,55 @@ class YahooHttpProvider:
         if not keys:
             return {}
         out: dict[str, NormalizedQuote | None] = {k: None for k in keys}
-        throttled: BaseException | None = None
-        with ThreadPoolExecutor(max_workers=min(8, len(keys))) as pool:
+        workers = min(8, len(keys))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             futs = {pool.submit(self.get_quote, key): key for key in keys}
             for fut in as_completed(futs):
                 key = futs[fut]
                 try:
                     out[key] = fut.result()
-                except Exception as exc:  # noqa: BLE001
-                    throttled = exc
-        if throttled is not None and not any(out.values()):
-            raise throttled
+                except ProviderLimited:
+                    raise
+                except Exception:  # noqa: BLE001
+                    out[key] = None
         return out
+
+    def get_history(self, symbol: str, range_key: str) -> list[HistoryPoint]:
+        key = symbol.upper().strip()
+        params = {
+            "1d": {"interval": "5m", "range": "1d"},
+            "5d": {"interval": "1d", "range": "5d"},
+            "1mo": {"interval": "1d", "range": "1mo"},
+            "1y": {"interval": "1d", "range": "1y"},
+        }.get(range_key, {"interval": "1d", "range": "5d"})
+        try:
+            resp = self._client.get(_CHART.format(symbol=key), params=params)
+            if resp.status_code == 429:
+                raise ProviderLimited(60)
+            resp.raise_for_status()
+            payload = resp.json()
+        except ProviderLimited:
+            raise
+        except Exception:  # noqa: BLE001
+            return []
+        results = (payload.get("chart") or {}).get("result") or []
+        if not results:
+            return []
+        result = results[0]
+        quotes = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+        closes = quotes.get("close") or []
+        volumes = quotes.get("volume") or []
+        stamps = result.get("timestamp") or []
+        points: list[HistoryPoint] = []
+        for i, close in enumerate(closes):
+            if close is None:
+                continue
+            ts = datetime.now(UTC)
+            if i < len(stamps):
+                try:
+                    ts = datetime.fromtimestamp(int(stamps[i]), tz=UTC)
+                except (TypeError, ValueError, OSError):
+                    pass
+            vol = _num(volumes[i] if i < len(volumes) else 0)
+            points.append(HistoryPoint(timestamp=ts, close=float(close), volume=vol))
+        return points

@@ -1,4 +1,5 @@
 fastapi==0.115.6
+starlette==0.41.3
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
@@ -7,6 +8,7 @@ pydantic-settings==2.7.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 python-jose[cryptography]==3.3.0
+cryptography==44.0.0
 python-multipart==0.0.20
 redis==5.2.1
 httpx==0.28.1

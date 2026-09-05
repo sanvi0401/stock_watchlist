@@ -1,14 +1,17 @@
-"""Per-IP fixed-window limit for credential endpoints, backed by the quote cache tier."""
-
-from __future__ import annotations
-
-import time
+from time import time
 
 from fastapi import Request
 
 from app.cache import cache_get, cache_set
 from app.config import settings
 from app.errors import AppError
+
+_AUTH_PATHS = {
+    "/auth/login",
+    "/auth/register",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+}
 
 
 def _client_ip(request: Request) -> str:
@@ -18,13 +21,23 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def auth_rate_limit(request: Request) -> None:
-    limit = settings.auth_rate_limit_per_minute
-    if limit <= 0 or settings.environment.lower() == "test":
+def enforce_auth_rate_limit(request: Request) -> None:
+    if settings.environment == "test":
         return
-    window = int(time.time() // 60)
-    key = f"rl:auth:{_client_ip(request)}:{window}"
+    path = request.url.path
+    if path not in _AUTH_PATHS and not path.endswith(tuple(_AUTH_PATHS)):
+        # mounted without prefix sometimes
+        if not any(path.endswith(p) for p in _AUTH_PATHS):
+            return
+    ip = _client_ip(request)
+    window = int(time() // 60)
+    key = f"rl:{ip}:{path}:{window}"
     count = int(cache_get(key) or 0)
+    limit = settings.auth_rate_limit_per_minute
     if count >= limit:
         raise AppError(429, "rate_limited", "Too many attempts. Wait a minute and try again.")
-    cache_set(key, count + 1, ttl=90)
+    cache_set(key, count + 1, ttl=70)
+
+
+def rate_limit_dependency(request: Request) -> None:
+    enforce_auth_rate_limit(request)
