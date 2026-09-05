@@ -30,6 +30,8 @@ class User(Base):
     sensitivity: Mapped[str] = mapped_column(String(16), default="balanced")
     lookback_mode: Mapped[str] = mapped_column(String(32), default="since_last_check")
     token_version: Mapped[int] = mapped_column(Integer, default=0)
+    totp_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
