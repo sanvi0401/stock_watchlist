@@ -8,39 +8,43 @@ from app.security import MAX_PASSWORD_BYTES
 Severity = Literal["STABLE", "NOTABLE", "MEANINGFUL", "HIGH"]
 DataStatus = Literal["LIVE", "DELAYED", "STALE", "UNAVAILABLE"]
 
-
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     onboarding_complete: bool = False
     expires_in: int | None = None
 
-
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=MAX_PASSWORD_BYTES)
 
-
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-
+    authenticator_code: str = Field(min_length=6, max_length=6)
 
 class ForgotPasswordResponse(BaseModel):
     ok: bool = True
     message: str
-    dev_reset_token: str | None = None
-
 
 class ResetPasswordRequest(BaseModel):
     token: str
     password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
+class TotpSetupResponse(BaseModel):
+    configured: bool
+    secret: str | None = None
+    otpauth_uri: str | None = None
+
+class TotpVerifyRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+class TotpStatusResponse(BaseModel):
+    enabled: bool
 
 class UserOut(BaseModel):
     id: int
@@ -51,25 +55,20 @@ class UserOut(BaseModel):
     sensitivity: str
     lookback_mode: str
     created_at: datetime | None = None
-
     model_config = {"from_attributes": True}
-
 
 class WatchlistCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     category: str = "General"
     symbols: list[str] = []
 
-
 class WatchlistUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     category: str | None = None
 
-
 class AddStockRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=80)
     watchlist_id: int | None = None
-
 
 class QuoteOut(BaseModel):
     symbol: str
@@ -96,30 +95,27 @@ class QuoteOut(BaseModel):
     change_type: str = "none"
     evidence: list[str] = []
 
-
 class HistoryPointOut(BaseModel):
     timestamp: datetime
     close: float
     volume: float = 0
-
 
 class WatchlistStockOut(BaseModel):
     symbol: str
     added_at: datetime
     quote: QuoteOut | None = None
 
-
 class WatchlistOut(BaseModel):
     id: int
     name: str
     category: str
     created_at: datetime
+    updated_at: datetime | None = None
     stock_count: int
     stocks: list[WatchlistStockOut] = []
     attention_count: int = 0
     meaningful_count: int = 0
     stable_count: int = 0
-
 
 class DashboardOut(BaseModel):
     greeting: str
@@ -138,7 +134,6 @@ class DashboardOut(BaseModel):
     first_time: bool = False
     baseline_advances_on: str = "acknowledge"
 
-
 class HistoryItem(BaseModel):
     id: int
     timestamp: datetime
@@ -154,11 +149,9 @@ class HistoryItem(BaseModel):
     evidence: list[str] = []
     snapshot_id: int | None = None
 
-
 class HistoryPage(BaseModel):
     items: list[HistoryItem]
     next_cursor: int | None = None
-
 
 class SettingsOut(BaseModel):
     name: str
@@ -170,11 +163,8 @@ class SettingsOut(BaseModel):
     high_significance_only: bool
     unusual_volume_emphasis: bool
     created_at: datetime | None = None
-    alerts_note: str = (
-        "Preferences only. This app does not send email or push; changes appear in-app on Overview."
-    )
+    alerts_note: str = "Preferences only. This app does not send email or push; changes appear in-app on Overview."
     prices_note: str = "Prices are shown in USD as reported by the delayed quote feed. FX conversion is not implemented."
-
 
 class SettingsPatch(BaseModel):
     name: str | None = None
@@ -182,12 +172,11 @@ class SettingsPatch(BaseModel):
     sensitivity: str | None = None
     lookback_mode: str | None = None
     in_app_alerts: bool | None = None
-    email_alerts: bool | None = None  # accepted then mapped to in_app; not a mailer
-    push_alerts: bool | None = None  # ignored as a delivery channel
+    email_alerts: bool | None = None
+    push_alerts: bool | None = None
     high_significance_only: bool | None = None
     unusual_volume_emphasis: bool | None = None
     onboarding_complete: bool | None = None
-
 
 class NotificationOut(BaseModel):
     id: int
@@ -196,9 +185,7 @@ class NotificationOut(BaseModel):
     kind: str
     read: bool
     created_at: datetime
-
     model_config = {"from_attributes": True}
-
 
 class SearchResult(BaseModel):
     symbol: str
@@ -207,7 +194,6 @@ class SearchResult(BaseModel):
     price_change_percent: float | None
     data_status: DataStatus
     market_state: str
-
 
 class AcknowledgeOut(BaseModel):
     ok: bool = True
