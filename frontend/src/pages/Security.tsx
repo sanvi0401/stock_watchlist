@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import { api, ApiError } from '../services/api'
 import { Button, Card, Input, Label } from '../components/ui'
 
@@ -41,10 +42,14 @@ export function SecurityPage() {
       <h2 className="font-semibold">Authenticator app</h2>
       <p className="mt-2 text-sm text-[#94A3B8]">Use Google Authenticator or another TOTP app. Your code changes every 30 seconds.</p>
       {enabled ? <p className="mt-4 text-sm text-gain">✓ Authenticator enabled</p> : <>
-        {!secret ? <Button className="mt-4" onClick={setup} disabled={loading}>{loading ? 'Preparing…' : 'Set up Authenticator'}</Button> : <div className="mt-4 space-y-4">
-          <div><Label>Setup key</Label><Input readOnly value={secret} /></div>
-          <p className="text-xs text-[#94A3B8] break-all">If your authenticator supports it, use this setup URI: {uri}</p>
-          <div><Label>6-digit code</Label><Input inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} /></div>
+        {!secret ? <Button className="mt-4" onClick={setup} disabled={loading}>{loading ? 'Preparing…' : 'Set up Authenticator'}</Button> : <div className="mt-4 space-y-5">
+          {uri ? <div className="flex flex-col items-center gap-3 rounded-lg border border-[#334155] bg-white p-4">
+            <QRCodeSVG value={uri} size={220} level="M" includeMargin={true} aria-label="Authenticator setup QR code" />
+            <p className="text-center text-xs text-slate-600">Open Google Authenticator, tap +, choose Scan a QR code, and scan this code.</p>
+          </div> : null}
+          <div><Label>Manual setup key</Label><Input readOnly value={secret} /></div>
+          <p className="text-xs text-[#94A3B8] break-all">If you cannot scan the QR code, enter this setup key manually in your authenticator app.</p>
+          <div><Label>6-digit code</Label><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} /></div>
           <Button onClick={verify} disabled={loading || code.length !== 6}>{loading ? 'Verifying…' : 'Verify and enable'}</Button>
         </div>}
       </>}
