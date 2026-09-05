@@ -48,6 +48,24 @@ def ensure_detected_change_columns() -> None:
             connection.execute(text(f"ALTER TABLE detected_changes ADD COLUMN {name} {sql_type}"))
 
 
+def ensure_authenticator_columns() -> None:
+    """Add TOTP columns to existing user tables without dropping data."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("users")}
+    required = {
+        "totp_secret": "VARCHAR(512)",
+        "totp_enabled": "BOOLEAN DEFAULT FALSE",
+    }
+    missing = [(name, sql_type) for name, sql_type in required.items() if name not in existing]
+    if not missing:
+        return
+    with engine.begin() as connection:
+        for name, sql_type in missing:
+            connection.execute(text(f"ALTER TABLE users ADD COLUMN {name} {sql_type}"))
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
