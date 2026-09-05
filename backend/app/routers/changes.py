@@ -27,11 +27,9 @@ def history(
     db: Session = Depends(get_db),
 ):
     """Keyset-paginated history that works with both legacy and upgraded databases."""
-    # Do not select the newly-added DetectedChange ORM columns here. Existing
-    # Neon databases may still have the legacy table shape, and selecting the
-    # ORM entity would make PostgreSQL fail before our fallback logic runs.
-    # The history endpoint only needs the stable legacy columns plus the
-    # optional MarketSnapshot, from which the newer price fields can be derived.
+    # Only select columns that exist in the original detected_changes table.
+    # This keeps existing Neon databases readable even before their optional
+    # history columns have been added.
     stmt = select(
         DetectedChange.id,
         DetectedChange.user_id,
@@ -60,7 +58,7 @@ def history(
 
     rows = list(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1).all())
     page_rows = rows[:limit]
-    next_cursor = page_rows[-1].id if len(rows) > limit else None
+    next_cursor = page_rows[-1][0] if len(rows) > limit else None
 
     items: list[HistoryItem] = []
     for row in page_rows:
@@ -78,9 +76,7 @@ def history(
             snapshot,
         ) = row
 
-        # Legacy rows do not have the newer price columns. Derive the values
-        # from the market snapshot so history remains readable without a DB
-        # migration having to run first.
+        # Legacy rows derive the display prices from their linked snapshot.
         baseline = snapshot.previous_close if snapshot is not None else None
         current = snapshot.price if snapshot is not None else None
         since_pct = _pct(current, baseline) if current is not None and baseline is not None else None
