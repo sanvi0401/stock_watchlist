@@ -4,17 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import DetectedChange, MarketSnapshot, User
+from app.models import DetectedChange, User
 from app.schemas import HistoryItem, HistoryPage
 
 router = APIRouter(prefix="/changes", tags=["changes"])
 SEVERITIES = {"HIGH", "MEANINGFUL", "NOTABLE", "STABLE"}
-
-
-def _pct(new: float, old: float) -> float:
-    if old == 0:
-        return 0.0
-    return (new - old) / old * 100.0
 
 
 @router.get("/history", response_model=HistoryPage)
@@ -26,24 +20,24 @@ def history(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Keyset-paginated history that works with both legacy and upgraded databases."""
-    # Only select columns that exist in the original detected_changes table.
-    # This keeps existing Neon databases readable even before their optional
-    # history columns have been added.
+    """Return recorded changes without requiring optional snapshot columns."""
+    # The history display values are persisted on detected_changes. Query those
+    # columns directly instead of joining market_snapshots. This is important
+    # for existing Neon databases where snapshot_id may not exist yet, and it
+    # also means an empty history is simply a valid empty response.
     stmt = select(
         DetectedChange.id,
-        DetectedChange.user_id,
         DetectedChange.symbol,
         DetectedChange.change_type,
         DetectedChange.significance_score,
         DetectedChange.severity,
+        DetectedChange.baseline_price,
+        DetectedChange.current_price,
+        DetectedChange.currency,
+        DetectedChange.since_last_check_percent,
         DetectedChange.explanation,
         DetectedChange.evidence,
         DetectedChange.detected_at,
-        DetectedChange.snapshot_id,
-        MarketSnapshot,
-    ).outerjoin(
-        MarketSnapshot, DetectedChange.snapshot_id == MarketSnapshot.id
     ).where(DetectedChange.user_id == user.id)
 
     if severity:
@@ -64,24 +58,26 @@ def history(
     for row in page_rows:
         (
             change_id,
-            _user_id,
             change_symbol,
             change_type,
             significance_score,
             change_severity,
+            baseline,
+            current,
+            stored_currency,
+            since_pct,
             explanation,
             evidence,
             detected_at,
-            snapshot_id,
-            snapshot,
         ) = row
 
-        # Legacy rows derive the display prices from their linked snapshot.
-        baseline = snapshot.previous_close if snapshot is not None else None
-        current = snapshot.price if snapshot is not None else None
-        since_pct = _pct(current, baseline) if current is not None and baseline is not None else None
-        if baseline is None or current is None or since_pct is None:
+        # Incomplete legacy rows are not displayable as HistoryItem values.
+        # Skip those rows rather than turning an otherwise valid history request
+        # into a 500 response.
+        if baseline is None or current is None:
             continue
+        if since_pct is None:
+            since_pct = 0.0 if baseline == 0 else (current - baseline) / baseline * 100.0
 
         items.append(
             HistoryItem(
@@ -90,14 +86,14 @@ def history(
                 symbol=change_symbol,
                 change_type=change_type,
                 significance_score=significance_score,
-                severity=change_severity,  # type: ignore[arg-type]
+                severity=change_severity,
                 baseline_price=baseline,
                 current_price=current,
-                currency=user.currency or "USD",
+                currency=stored_currency or user.currency or "USD",
                 since_last_check_percent=since_pct,
                 explanation=explanation,
                 evidence=[e for e in (evidence or "").split(" | ") if e],
-                snapshot_id=snapshot_id,
+                snapshot_id=None,
             )
         )
 
