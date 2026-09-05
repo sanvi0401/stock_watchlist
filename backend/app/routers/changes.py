@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import ensure_detected_change_columns, get_db
+from app.db import get_db
 from app.deps import get_current_user
 from app.models import DetectedChange, MarketSnapshot, User
 from app.schemas import HistoryItem, HistoryPage
@@ -26,15 +26,28 @@ def history(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Keyset-paginated ledger of recorded changes (newest first)."""
-    # Vercel may reuse an existing database schema without running the
-    # application's startup lifespan. Ensure legacy databases have the
-    # history columns before SQLAlchemy builds the query below.
-    ensure_detected_change_columns()
-
-    stmt = select(DetectedChange, MarketSnapshot).outerjoin(
+    """Keyset-paginated history that works with both legacy and upgraded databases."""
+    # Do not select the newly-added DetectedChange ORM columns here. Existing
+    # Neon databases may still have the legacy table shape, and selecting the
+    # ORM entity would make PostgreSQL fail before our fallback logic runs.
+    # The history endpoint only needs the stable legacy columns plus the
+    # optional MarketSnapshot, from which the newer price fields can be derived.
+    stmt = select(
+        DetectedChange.id,
+        DetectedChange.user_id,
+        DetectedChange.symbol,
+        DetectedChange.change_type,
+        DetectedChange.significance_score,
+        DetectedChange.severity,
+        DetectedChange.explanation,
+        DetectedChange.evidence,
+        DetectedChange.detected_at,
+        DetectedChange.snapshot_id,
+        MarketSnapshot,
+    ).outerjoin(
         MarketSnapshot, DetectedChange.snapshot_id == MarketSnapshot.id
     ).where(DetectedChange.user_id == user.id)
+
     if severity:
         normalized = severity.strip().upper()
         if normalized not in SEVERITIES:
@@ -47,34 +60,48 @@ def history(
 
     rows = list(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1).all())
     page_rows = rows[:limit]
-    next_cursor = page_rows[-1][0].id if len(rows) > limit else None
+    next_cursor = page_rows[-1].id if len(rows) > limit else None
 
     items: list[HistoryItem] = []
-    for change, snapshot in page_rows:
-        baseline = change.baseline_price
-        current = change.current_price
-        since_pct = change.since_last_check_percent
-        if (baseline is None or current is None or since_pct is None) and snapshot is not None:
-            baseline = snapshot.previous_close if baseline is None else baseline
-            current = snapshot.price if current is None else current
-            since_pct = _pct(current, baseline) if since_pct is None else since_pct
+    for row in page_rows:
+        (
+            change_id,
+            _user_id,
+            change_symbol,
+            change_type,
+            significance_score,
+            change_severity,
+            explanation,
+            evidence,
+            detected_at,
+            snapshot_id,
+            snapshot,
+        ) = row
+
+        # Legacy rows do not have the newer price columns. Derive the values
+        # from the market snapshot so history remains readable without a DB
+        # migration having to run first.
+        baseline = snapshot.previous_close if snapshot is not None else None
+        current = snapshot.price if snapshot is not None else None
+        since_pct = _pct(current, baseline) if current is not None and baseline is not None else None
         if baseline is None or current is None or since_pct is None:
             continue
+
         items.append(
             HistoryItem(
-                id=change.id,
-                timestamp=change.detected_at,
-                symbol=change.symbol,
-                change_type=change.change_type,
-                significance_score=change.significance_score,
-                severity=change.severity,  # type: ignore[arg-type]
+                id=change_id,
+                timestamp=detected_at,
+                symbol=change_symbol,
+                change_type=change_type,
+                significance_score=significance_score,
+                severity=change_severity,  # type: ignore[arg-type]
                 baseline_price=baseline,
                 current_price=current,
-                currency=change.currency or user.currency or "USD",
+                currency=user.currency or "USD",
                 since_last_check_percent=since_pct,
-                explanation=change.explanation,
-                evidence=[e for e in (change.evidence or "").split(" | ") if e],
-                snapshot_id=change.snapshot_id,
+                explanation=explanation,
+                evidence=[e for e in (evidence or "").split(" | ") if e],
+                snapshot_id=snapshot_id,
             )
         )
 
