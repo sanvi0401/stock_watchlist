@@ -128,9 +128,9 @@ def validate_settings(cfg: "Settings | None" = None) -> None:
             file=sys.stderr,
         )
         raise SystemExit(2)
-    if not cfg.resend_api_key or not cfg.email_from:
+    if not cfg.smtp_host or not cfg.smtp_user or not cfg.smtp_password or not cfg.smtp_from:
         print(
-            "FATAL: production requires RESEND_API_KEY and EMAIL_FROM for password reset email.",
+            "FATAL: production requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM for password reset email.",
             file=sys.stderr,
         )
         raise SystemExit(2)
