@@ -22,14 +22,20 @@ def history(
 ):
     """Keyset-paginated ledger of recorded changes (newest first)."""
     stmt = select(DetectedChange).where(DetectedChange.user_id == user.id)
-    if severity and severity.upper() in SEVERITIES:
-        stmt = stmt.where(DetectedChange.severity == severity.upper())
+    if severity:
+        normalized = severity.strip().upper()
+        if normalized not in SEVERITIES:
+            return HistoryPage(items=[], next_cursor=None)
+        stmt = stmt.where(DetectedChange.severity == normalized)
     if symbol:
-        stmt = stmt.where(DetectedChange.symbol == symbol.upper())
+        stmt = stmt.where(DetectedChange.symbol == symbol.strip().upper())
     if cursor:
         stmt = stmt.where(DetectedChange.id < cursor)
+
     rows = list(db.scalars(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1)).all())
-    next_cursor = rows[limit - 1].id if len(rows) > limit else None
+    page_rows = rows[:limit]
+    next_cursor = page_rows[-1].id if len(rows) > limit else None
+
     return HistoryPage(
         items=[
             HistoryItem(
@@ -47,7 +53,7 @@ def history(
                 evidence=[e for e in (r.evidence or "").split(" | ") if e],
                 snapshot_id=r.snapshot_id,
             )
-            for r in rows[:limit]
+            for r in page_rows
         ],
         next_cursor=next_cursor,
     )
