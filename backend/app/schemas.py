@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 
 from app.security import MAX_PASSWORD_BYTES
 
@@ -25,8 +25,17 @@ class LoginRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    authenticator_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
-    new_password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
+    authenticator_code: str = Field(
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+        validation_alias=AliasChoices("authenticator_code", "code"),
+    )
+    new_password: str = Field(
+        min_length=8,
+        max_length=MAX_PASSWORD_BYTES,
+        validation_alias=AliasChoices("new_password", "password"),
+    )
 
 class ForgotPasswordResponse(BaseModel):
     ok: bool = True
