@@ -36,6 +36,7 @@ def send_reset_email(to_email: str, reset_url: str) -> bool:
         headers={
             "Authorization": f"Bearer {s.resend_api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "market-watch/1.0",
         },
         method="POST",
     )
