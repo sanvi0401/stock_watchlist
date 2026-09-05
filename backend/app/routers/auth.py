@@ -30,10 +30,7 @@ from app.security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-GENERIC_FORGOT = (
-    "If that email is registered, a reset link is issued. "
-    "When SMTP is configured it is emailed; otherwise check with the operator."
-)
+GENERIC_FORGOT = "If that email is registered, a reset link is issued."
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -42,10 +39,7 @@ def register(
     db: Session = Depends(get_db),
     _: None = Depends(enforce_auth_rate_limit),
 ) -> TokenResponse:
-    try:
-        validate_password_length(body.password)
-    except AppError:
-        raise
+    validate_password_length(body.password)
     existing = db.scalar(select(User).where(User.email == body.email.lower()))
     if existing:
         raise AppError(409, "duplicate_email", "An account with this email already exists.")
@@ -101,7 +95,6 @@ def forgot_password(
     settings = get_settings()
     email = body.email.lower()
     user = db.scalar(select(User).where(User.email == email))
-    raw: str | None = None
     if user:
         raw = new_reset_token()
         db.add(
@@ -117,13 +110,9 @@ def forgot_password(
         if origin not in allowed:
             origin = settings.public_url
         reset_url = f"{origin}/reset-password?token={raw}"
+        # Delivery failures are intentionally not exposed to the caller so the
+        # endpoint remains resistant to account enumeration.
         send_reset_email(user.email, reset_url)
-    if settings.allow_dev_reset_echo and raw:
-        return ForgotPasswordResponse(
-            ok=True,
-            message="Development only: token returned because SMTP is not required locally.",
-            dev_reset_token=raw,
-        )
     return ForgotPasswordResponse(ok=True, message=GENERIC_FORGOT)
 
 
@@ -133,10 +122,7 @@ def reset_password(
     db: Session = Depends(get_db),
     _: None = Depends(enforce_auth_rate_limit),
 ) -> dict:
-    try:
-        validate_password_length(body.password)
-    except AppError:
-        raise
+    validate_password_length(body.password)
     token_hash = hash_reset_token(body.token)
     row = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash))
     now = datetime.now(UTC)
