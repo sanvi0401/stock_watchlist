@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.intelligence.explanation import explain_change
 from app.intelligence.significance import notable_floor, significance_score
 from app.market.types import NormalizedQuote
-from app.models import DetectedChange, Notification, UserStockState
+from app.models import DetectedChange, Notification, User, UserStockState
 
 
 @dataclass
@@ -231,6 +231,7 @@ def record_detected_change(db: Session, user_id: int, result: ChangeResult) -> b
     exists = db.query(DetectedChange).filter_by(user_id=user_id, fingerprint=result.fingerprint).one_or_none()
     if exists:
         return False
+    user = db.query(User).filter(User.id == user_id).one_or_none()
     db.add(
         DetectedChange(
             user_id=user_id,
@@ -238,6 +239,10 @@ def record_detected_change(db: Session, user_id: int, result: ChangeResult) -> b
             change_type=result.change_type,
             significance_score=result.significance_score,
             severity=result.severity,
+            baseline_price=result.previous_price,
+            current_price=result.current_price,
+            currency=(user.currency if user else "USD"),
+            since_last_check_percent=result.since_last_check_percent,
             explanation=result.explanation,
             evidence=" | ".join(result.evidence),
             fingerprint=result.fingerprint,
