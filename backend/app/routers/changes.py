@@ -51,7 +51,11 @@ def history(
         stmt = stmt.where(DetectedChange.id < cursor)
 
     try:
-        rows = list(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1).all())
+        rows = list(
+            db.execute(
+                stmt.order_by(DetectedChange.id.desc()).limit(limit + 1)
+            ).all()
+        )
     except ProgrammingError as exc:
         # A pre-existing Neon database can briefly have the old detected_changes
         # schema while the serverless startup migration catches up. Treat that
