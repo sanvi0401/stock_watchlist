@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     resend_api_key: str = ""
-    email_from: str = ""
+    email_from: str = "onboarding@resend.dev"
     live_max_age_seconds: int = 5 * 60
     delayed_max_age_seconds: int = 20 * 60
     stale_max_age_seconds: int = 24 * 60 * 60
