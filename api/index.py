@@ -10,10 +10,7 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from app.db import Base, engine  # noqa: E402
 from app.main import app as fastapi_app  # noqa: E402
-
-Base.metadata.create_all(bind=engine)
 
 
 class StripApiPrefix:

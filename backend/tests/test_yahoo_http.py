@@ -50,11 +50,9 @@ def test_yahoo_http_quote_from_chart():
     assert quote.company_name == "NVIDIA Corporation"
 
 
-def test_yahoo_http_falls_back_to_mock():
+def test_yahoo_http_returns_none_on_failure():
     provider = YahooHttpProvider()
     with patch.object(provider, "_client") as client:
         client.get.side_effect = RuntimeError("boom")
         quote = provider.get_quote("COST")
-    assert quote is not None
-    assert quote.source == "mock-terminal"
-    assert quote.symbol == "COST"
+    assert quote is None

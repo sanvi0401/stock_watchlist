@@ -1,33 +1,33 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { api, clearToken } from '../services/api'
-import type { Health, User } from '../types'
-import { cn } from '../utils/cn'
-import { marketLine } from '../utils/format'
+import { api, clearToken, getToken } from '../services/api'
+import { cn } from '../components/ui'
+import { setDisplayTimezone } from '../utils/format'
 
 const links = [
-  { to: '/app/overview', label: 'Overview' },
-  { to: '/app/watchlists', label: 'My Watchlists' },
-  { to: '/app/discover', label: 'Discover' },
-  { to: '/app/history', label: 'Change History' },
-  { to: '/app/settings', label: 'Settings' },
+  { to: '/app/overview', label: 'Overview', icon: 'dashboard' },
+  { to: '/app/watchlists', label: 'My Watchlists', icon: 'view_list' },
+  { to: '/app/discover', label: 'Discover / Signals', icon: 'radar' },
+  { to: '/app/history', label: 'Change History', icon: 'history' },
+  { to: '/app/settings', label: 'Settings', icon: 'tune' },
 ]
 
 export default function AppShell() {
   const nav = useNavigate()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [me, setMe] = useState<User | null>(null)
-  const [health, setHealth] = useState<Health | null>(null)
+  const [name, setName] = useState('Analyst')
+  const [session, setSession] = useState('…')
 
   useEffect(() => {
-    api.me().then(setMe).catch(() => undefined)
-    api.health().then(setHealth).catch(() => undefined)
-    const t = setInterval(() => api.health().then(setHealth).catch(() => undefined), 60_000)
-    return () => clearInterval(t)
-  }, [])
-
-  const anyOpen = health?.markets?.some((m) => m.state === 'OPEN') ?? false
+    if (!getToken()) nav('/login')
+    api.me().then((u) => setName((u as { name: string }).name)).catch(() => undefined)
+    api.settings().then((s) => {
+      const tz = (s as { timezone?: string }).timezone
+      if (tz) setDisplayTimezone(tz)
+    }).catch(() => undefined)
+    api.marketSession().then((s) => setSession(s.market_state)).catch(() => setSession('UNKNOWN'))
+  }, [nav])
 
   return (
     <div className="min-h-screen bg-surface text-on-surface">
@@ -37,9 +37,9 @@ export default function AppShell() {
       )}>
         <div>
           <div className="flex h-16 items-center gap-2 px-5">
-            <img src="/logo.svg" alt="Smart Market Watch" className="h-8" />
+            <img src="/logo.svg" alt="Market Watch" className="h-8" />
           </div>
-          <p className="px-5 pb-3 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">What changed since you last looked</p>
+          <p className="px-5 pb-3 text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Quantitative Engine</p>
           <nav className="flex flex-col gap-1 px-3">
             {links.map((l) => (
               <NavLink
@@ -57,27 +57,15 @@ export default function AppShell() {
         </div>
         <div className="p-4">
           <div className="rounded-lg border border-[#232F46] bg-surface-container p-3">
-            <p className={cn('text-xs', anyOpen ? 'text-gain' : 'text-on-surface-variant')}>
-              {health ? marketLine(health.markets) : 'Checking markets…'}
-            </p>
-            {health ? (
-              <p className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                {health.provider} · cache {health.cache}{health.provider_cooldown_seconds > 0 ? ` · provider cooling ${health.provider_cooldown_seconds}s` : ''}
-              </p>
-            ) : null}
-            <p className="mt-2 truncate text-sm font-medium">{me?.name ?? '…'}</p>
-            <p className="truncate text-xs text-on-surface-variant">{me?.email ?? ''}</p>
+            <p className="text-xs text-gain">US session: {session}</p>
+            <p className="mt-2 text-sm font-medium">{name}</p>
+            <p className="text-xs text-on-surface-variant">Approximate regular hours · not a holiday feed</p>
           </div>
         </div>
       </aside>
       <div className="md:pl-72">
-        {health?.persistence === 'ephemeral' ? (
-          <div className="border-b border-warn/30 bg-warn/10 px-4 py-2 text-xs text-warn">
-            Demo deployment without a durable database: accounts and baselines can reset when the server recycles. Set DATABASE_URL for persistence.
-          </div>
-        ) : null}
         <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-[#232F46] bg-surface/90 px-4 py-3 backdrop-blur">
-          <button className="md:hidden text-on-surface" onClick={() => setOpen((v) => !v)} aria-label="Toggle navigation">☰</button>
+          <button className="md:hidden text-on-surface" onClick={() => setOpen((v) => !v)}>☰</button>
           <form
             className="relative flex-1"
             onSubmit={(e) => {
@@ -88,15 +76,14 @@ export default function AppShell() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search any listed company (Reliance, TCS.NS, NVDA…)"
-              className="h-9 w-full rounded border border-[#232F46] bg-[#0B0F17] px-3 text-sm"
-              aria-label="Search stocks"
+              placeholder="Search Google, NVIDIA, Apple, or a ticker…"
+              className="h-9 w-full rounded border border-[#232F46] bg-[#0B0F17] px-3 pr-12 text-sm"
             />
+            <span className="absolute right-2 top-1.5 rounded bg-[#1A2234] px-1.5 font-mono text-[11px] text-[#94A3B8]">⌘K</span>
           </form>
           <button onClick={() => nav('/app/notifications')} className="text-sm text-on-surface-variant">Alerts</button>
           <button
             onClick={() => {
-              api.logout().catch(() => undefined)
               clearToken()
               nav('/login')
             }}
@@ -105,7 +92,7 @@ export default function AppShell() {
             Sign out
           </button>
         </header>
-        {open ? <button className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setOpen(false)} aria-label="Close navigation" /> : null}
+        {open ? <button className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setOpen(false)} /> : null}
         <main className="px-4 py-6 md:px-8">
           <Outlet />
         </main>

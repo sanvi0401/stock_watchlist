@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import type { DataStatus, Severity } from '../types'
 import { cn } from '../utils/cn'
+export { cn } from '../utils/cn'
+export { fmtCap, fmtPrice } from '../utils/format'
 
 export function Button({
   children,

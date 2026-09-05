@@ -29,4 +29,3 @@ agent-tools/
 .vercel
 _uv/
 .vercel_python_packages/
-.claude/

@@ -3,36 +3,43 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.security import MAX_PASSWORD_BYTES
+
 Severity = Literal["STABLE", "NOTABLE", "MEANINGFUL", "HIGH"]
 DataStatus = Literal["LIVE", "DELAYED", "STALE", "UNAVAILABLE"]
-Sensitivity = Literal["conservative", "balanced", "sensitive"]
-Lookback = Literal["since_last_check", "previous_close", "five_day"]
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     onboarding_complete: bool = False
+    expires_in: int | None = None
 
 
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=72)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(max_length=72)
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_BYTES)
 
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordResponse(BaseModel):
+    ok: bool = True
+    message: str
+    dev_reset_token: str | None = None
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
-    password: str = Field(min_length=8, max_length=72)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
 
 class UserOut(BaseModel):
@@ -50,17 +57,18 @@ class UserOut(BaseModel):
 
 class WatchlistCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    category: str = Field(default="General", max_length=64)
-    symbols: list[str] = Field(default_factory=list, max_length=100)
+    category: str = "General"
+    symbols: list[str] = []
 
 
 class WatchlistUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    category: str | None = Field(default=None, max_length=64)
+    category: str | None = None
 
 
 class AddStockRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=80)
+    watchlist_id: int | None = None
 
 
 class QuoteOut(BaseModel):
@@ -69,7 +77,6 @@ class QuoteOut(BaseModel):
     current_price: float
     previous_close: float
     previous_price: float | None = None
-    baseline_at: datetime | None = None
     price_change_percent: float
     since_last_check_percent: float | None = None
     volume: float
@@ -78,10 +85,6 @@ class QuoteOut(BaseModel):
     market_cap: float
     week_52_high: float
     week_52_low: float
-    sparkline: list[float] = []
-    currency: str = "USD"
-    exchange: str = ""
-    exchange_name: str = ""
     timestamp: datetime
     source: str
     data_status: DataStatus
@@ -92,6 +95,12 @@ class QuoteOut(BaseModel):
     explanation: str = ""
     change_type: str = "none"
     evidence: list[str] = []
+
+
+class HistoryPointOut(BaseModel):
+    timestamp: datetime
+    close: float
+    volume: float = 0
 
 
 class WatchlistStockOut(BaseModel):
@@ -110,18 +119,10 @@ class WatchlistOut(BaseModel):
     attention_count: int = 0
     meaningful_count: int = 0
     stable_count: int = 0
-    unavailable_count: int = 0
-
-
-class MarketOut(BaseModel):
-    exchange: str
-    exchange_name: str
-    state: str
 
 
 class DashboardOut(BaseModel):
     greeting: str
-    baseline_at: datetime | None
     last_checked_at: datetime | None
     stocks_tracked: int
     watchlist_count: int
@@ -129,20 +130,13 @@ class DashboardOut(BaseModel):
     needs_attention: int
     stable_count: int
     market_state: str
-    markets: list[MarketOut] = []
     data_status: DataStatus
     needs_attention_items: list[QuoteOut]
     meaningful_items: list[QuoteOut]
     stable_items: list[QuoteOut]
     unavailable_items: list[QuoteOut] = []
     first_time: bool = False
-    new_visit: bool = False
-
-
-class CheckpointOut(BaseModel):
-    ok: bool = True
-    symbols: int
-    baseline_at: datetime
+    baseline_advances_on: str = "acknowledge"
 
 
 class HistoryItem(BaseModel):
@@ -152,12 +146,7 @@ class HistoryItem(BaseModel):
     change_type: str
     significance_score: float
     severity: Severity
-    baseline_price: float
-    current_price: float
-    currency: str = "USD"
-    since_last_check_percent: float
     explanation: str
-    evidence: list[str] = []
     snapshot_id: int | None = None
 
 
@@ -172,17 +161,26 @@ class SettingsOut(BaseModel):
     timezone: str
     sensitivity: str
     lookback_mode: str
+    in_app_alerts: bool
     high_significance_only: bool
-    onboarding_complete: bool
+    unusual_volume_emphasis: bool
     created_at: datetime | None = None
+    alerts_note: str = (
+        "Preferences only. This app does not send email or push; changes appear in-app on Overview."
+    )
+    prices_note: str = "Prices are shown in USD as reported by the delayed quote feed. FX conversion is not implemented."
 
 
 class SettingsPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
+    name: str | None = None
     timezone: str | None = None
-    sensitivity: Sensitivity | None = None
-    lookback_mode: Lookback | None = None
+    sensitivity: str | None = None
+    lookback_mode: str | None = None
+    in_app_alerts: bool | None = None
+    email_alerts: bool | None = None  # accepted then mapped to in_app; not a mailer
+    push_alerts: bool | None = None  # ignored as a delivery channel
     high_significance_only: bool | None = None
+    unusual_volume_emphasis: bool | None = None
     onboarding_complete: bool | None = None
 
 
@@ -202,20 +200,12 @@ class SearchResult(BaseModel):
     company_name: str
     current_price: float | None
     price_change_percent: float | None
-    currency: str = "USD"
-    exchange: str = ""
-    exchange_name: str = ""
     data_status: DataStatus
     market_state: str
 
 
-class HealthOut(BaseModel):
+class AcknowledgeOut(BaseModel):
     ok: bool = True
-    environment: str
-    provider: str
-    cache: str
-    persistence: str
-    market_state: str
-    markets: list[MarketOut] = []
-    provider_cooldown_seconds: int = 0
-    server_time: datetime
+    acknowledged_at: datetime
+    symbols: list[str]
+    message: str
