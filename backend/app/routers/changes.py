@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import ensure_detected_change_columns, get_db
 from app.deps import get_current_user
 from app.models import DetectedChange, MarketSnapshot, User
 from app.schemas import HistoryItem, HistoryPage
@@ -27,6 +27,11 @@ def history(
     db: Session = Depends(get_db),
 ):
     """Keyset-paginated ledger of recorded changes (newest first)."""
+    # Vercel may reuse an existing database schema without running the
+    # application's startup lifespan. Ensure legacy databases have the
+    # history columns before SQLAlchemy builds the query below.
+    ensure_detected_change_columns()
+
     stmt = select(DetectedChange, MarketSnapshot).outerjoin(
         MarketSnapshot, DetectedChange.snapshot_id == MarketSnapshot.id
     ).where(DetectedChange.user_id == user.id)
