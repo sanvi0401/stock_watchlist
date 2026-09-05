@@ -25,7 +25,8 @@ class LoginRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    authenticator_code: str = Field(min_length=6, max_length=6)
+    authenticator_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=MAX_PASSWORD_BYTES)
 
 class ForgotPasswordResponse(BaseModel):
     ok: bool = True
@@ -41,7 +42,7 @@ class TotpSetupResponse(BaseModel):
     otpauth_uri: str | None = None
 
 class TotpVerifyRequest(BaseModel):
-    code: str = Field(min_length=6, max_length=6)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 class TotpStatusResponse(BaseModel):
     enabled: bool
