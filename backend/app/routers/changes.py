@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -9,6 +12,7 @@ from app.schemas import HistoryItem, HistoryPage
 
 router = APIRouter(prefix="/changes", tags=["changes"])
 SEVERITIES = {"HIGH", "MEANINGFUL", "NOTABLE", "STABLE"}
+logger = logging.getLogger(__name__)
 
 
 @router.get("/history", response_model=HistoryPage)
@@ -20,11 +24,7 @@ def history(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return recorded changes without requiring optional snapshot columns."""
-    # The history display values are persisted on detected_changes. Query those
-    # columns directly instead of joining market_snapshots. This is important
-    # for existing Neon databases where snapshot_id may not exist yet, and it
-    # also means an empty history is simply a valid empty response.
+    """Return recorded changes; an empty history is a normal empty response."""
     stmt = select(
         DetectedChange.id,
         DetectedChange.symbol,
@@ -50,7 +50,16 @@ def history(
     if cursor:
         stmt = stmt.where(DetectedChange.id < cursor)
 
-    rows = list(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1).all())
+    try:
+        rows = list(stmt.order_by(DetectedChange.id.desc()).limit(limit + 1).all())
+    except ProgrammingError as exc:
+        # A pre-existing Neon database can briefly have the old detected_changes
+        # schema while the serverless startup migration catches up. Treat that
+        # state as an empty history instead of surfacing a generic 500 to users.
+        db.rollback()
+        logger.warning("History schema is not ready yet: %s", exc)
+        return HistoryPage(items=[], next_cursor=None)
+
     page_rows = rows[:limit]
     next_cursor = page_rows[-1][0] if len(rows) > limit else None
 
@@ -71,9 +80,6 @@ def history(
             detected_at,
         ) = row
 
-        # Incomplete legacy rows are not displayable as HistoryItem values.
-        # Skip those rows rather than turning an otherwise valid history request
-        # into a 500 response.
         if baseline is None or current is None:
             continue
         if since_pct is None:
